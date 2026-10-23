@@ -2,6 +2,57 @@
 
 :root {
   color-scheme: light;
+
+  --branch-color-page: #fafaf9;
+  --branch-color-surface: #ffffff;
+  --branch-color-surface-muted: #f5f5f4;
+  --branch-color-line: #e7e5e4;
+  --branch-color-input: #d6d3d1;
+  --branch-color-ink: #1c1917;
+  --branch-color-muted: #57534e;
+  --branch-color-subtle: #78716c;
+  --branch-color-accent: #292524;
+  --branch-color-accent-hover: #44403c;
+  --branch-color-accent-ink: #ffffff;
+
+  --branch-font-sans: Arial, Helvetica, sans-serif;
+  --branch-font-mono: "Courier New", Courier, monospace;
+
+  --branch-space-1: 0.25rem;
+  --branch-space-2: 0.5rem;
+  --branch-space-3: 0.75rem;
+  --branch-space-4: 1rem;
+  --branch-space-5: 1.25rem;
+  --branch-space-6: 1.5rem;
+  --branch-space-8: 2rem;
+
+  --branch-radius-sm: 0.25rem;
+  --branch-radius-md: 0.375rem;
+  --branch-radius-card: 0.5rem;
+  --branch-radius-full: 9999px;
+
+  --branch-shadow-card: 0 1px 2px rgb(28 25 23 / 0.06);
+}
+
+@theme inline {
+  --color-page: var(--branch-color-page);
+  --color-surface: var(--branch-color-surface);
+  --color-surface-muted: var(--branch-color-surface-muted);
+  --color-line: var(--branch-color-line);
+  --color-input: var(--branch-color-input);
+  --color-ink: var(--branch-color-ink);
+  --color-muted: var(--branch-color-muted);
+  --color-subtle: var(--branch-color-subtle);
+  --color-accent: var(--branch-color-accent);
+  --color-accent-hover: var(--branch-color-accent-hover);
+  --color-accent-ink: var(--branch-color-accent-ink);
+  --font-sans: var(--branch-font-sans);
+  --font-mono: var(--branch-font-mono);
+  --radius-sm: var(--branch-radius-sm);
+  --radius-md: var(--branch-radius-md);
+  --radius-card: var(--branch-radius-card);
+  --radius-full: var(--branch-radius-full);
+  --shadow-card: var(--branch-shadow-card);
 }
 
 * {
@@ -11,8 +62,8 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #fafaf9;
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--branch-color-page);
+  font-family: var(--branch-font-sans);
 }
 
 a {
