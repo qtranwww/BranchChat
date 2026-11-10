@@ -1,3 +1,4 @@
+@import "@xyflow/react/dist/style.css";
 @import "tailwindcss";
 
 :root {
@@ -33,10 +34,9 @@ textarea {
 }
 
 .conversation-canvas {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 32px 20px;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
   background-color: var(--canvas);
   background-image: radial-gradient(circle, var(--dot) 1px, transparent 1px);
   background-position: center;
@@ -44,30 +44,70 @@ textarea {
 }
 
 .chat-experience {
-  width: min(100%, 460px);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.empty-chat {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  width: min(460px, calc(100% - 40px));
   display: grid;
   gap: 24px;
+  transform: translate(-50%, -50%);
 }
 
-.conversation-stack {
-  display: grid;
-  gap: 28px;
-}
-
-.conversation-node-shell {
-  position: relative;
-}
-
-.conversation-node-shell:not(:last-child)::after {
+.conversation-flow {
   position: absolute;
-  z-index: 0;
-  top: 100%;
+  inset: 0;
+}
+
+.canvas-title {
+  position: absolute;
+  z-index: 5;
+  top: 28px;
   left: 50%;
-  width: 2px;
-  height: 28px;
-  background: #aaa9a3;
-  content: "";
   transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.conversation-flow-node {
+  width: 100%;
+}
+
+.conversation-flow-node .react-flow__handle {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.react-flow__node-conversation {
+  cursor: default;
+  pointer-events: all;
+}
+
+.react-flow__edge-path {
+  shape-rendering: geometricPrecision;
+}
+
+.react-flow__pane {
+  cursor: default;
+}
+
+.chat-experience:has(.react-flow__node) .react-flow__pane {
+  cursor: grab;
+}
+
+.conversation-flow:active .react-flow__pane {
+  cursor: grabbing;
 }
 
 h1 {
@@ -323,13 +363,8 @@ h1 {
 }
 
 @media (max-width: 520px) {
-  .conversation-canvas {
-    align-items: start;
-    padding-top: 18vh;
-  }
-
-  .chat-experience {
-    gap: 22px;
+  .empty-chat {
+    top: 42%;
   }
 
   .composer-footer span {

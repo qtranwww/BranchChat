@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Composer } from "@/components/composer";
-import { ConversationNode } from "@/components/conversation-node";
+import { ConversationFlow } from "@/components/conversation-flow";
 import {
   appendAnswerDelta,
   appendNode,
@@ -11,8 +11,8 @@ import {
   completeNode,
   createConversation,
   failNode,
-  isTipNode,
   prepareNodeRetry,
+  type ChatNode,
   type ConversationState,
 } from "@/lib/conversation";
 
@@ -22,7 +22,6 @@ export function ChatExperience() {
   const [conversation, setConversation] = useState<ConversationState>(createConversation);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const nextNodeId = useRef(0);
-  const tipElement = useRef<HTMLDivElement>(null);
 
   async function streamAnswer(targetConversation: ConversationState, nodeId: string) {
     setActiveNodeId(nodeId);
@@ -114,66 +113,45 @@ export function ChatExperience() {
     void streamAnswer(retryConversation, nodeId);
   }
 
-  useEffect(() => {
-    if (conversation.nodes.length === 0) {
-      return;
-    }
-
-    tipElement.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [conversation.nodes.length]);
+  function renderTipComposer(node: ChatNode) {
+    return (
+      <Composer
+        id={`tip-prompt-${node.id}`}
+        label="Ask a follow-up question"
+        placeholder="Next question..."
+        variant="embedded"
+        autoFocus
+        onSubmit={addNode}
+      />
+    );
+  }
 
   return (
     <section className="chat-experience" aria-labelledby="page-title">
-      <h1 id="page-title">BranchChat</h1>
+      <ConversationFlow
+        conversation={conversation}
+        renderComposer={renderTipComposer}
+        onRetry={retryNode}
+      />
 
       {conversation.nodes.length === 0 ? (
-        <Composer
-          id="initial-prompt"
-          label="Ask BranchChat a question"
-          placeholder="Ask anything..."
-          variant="standalone"
-          autoFocus
-          onSubmit={addNode}
-        />
-      ) : (
-        <div className="conversation-stack">
-          {conversation.nodes.map((node) => {
-            const isTip = isTipNode(conversation, node.id);
-
-            return (
-              <div
-                className="conversation-node-shell"
-                data-sequence={node.sequence}
-                key={node.id}
-                ref={isTip ? tipElement : undefined}
-              >
-                <ConversationNode
-                  question={node.question}
-                  answer={node.answer}
-                  status={node.status}
-                  isTip={isTip}
-                  onRetry={isTip ? () => retryNode(node.id) : undefined}
-                  composer={
-                    isTip ? (
-                      <Composer
-                        id={`tip-prompt-${node.id}`}
-                        label="Ask a follow-up question"
-                        placeholder="Next question..."
-                        variant="embedded"
-                        autoFocus
-                        onSubmit={addNode}
-                      />
-                    ) : undefined
-                  }
-                />
-              </div>
-            );
-          })}
+        <div className="empty-chat">
+          <h1 id="page-title">BranchChat</h1>
+          <Composer
+            id="initial-prompt"
+            label="Ask BranchChat a question"
+            placeholder="Ask anything..."
+            variant="standalone"
+            autoFocus
+            onSubmit={addNode}
+          />
         </div>
+      ) : (
+        <>
+          <h1 id="page-title" className="canvas-title">
+            BranchChat
+          </h1>
+        </>
       )}
     </section>
   );
