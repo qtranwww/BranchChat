@@ -51,7 +51,23 @@ textarea {
 
 .conversation-stack {
   display: grid;
-  gap: 24px;
+  gap: 28px;
+}
+
+.conversation-node-shell {
+  position: relative;
+}
+
+.conversation-node-shell:not(:last-child)::after {
+  position: absolute;
+  z-index: 0;
+  top: 100%;
+  left: 50%;
+  width: 2px;
+  height: 28px;
+  background: #aaa9a3;
+  content: "";
+  transform: translateX(-50%);
 }
 
 h1 {
@@ -64,6 +80,8 @@ h1 {
 }
 
 .conversation-node {
+  position: relative;
+  z-index: 1;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 18px;
