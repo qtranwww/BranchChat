@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { appendNode, createConversation, isTipNode } from "./conversation";
+import {
+  appendAnswerDelta,
+  appendNode,
+  buildChatMessages,
+  completeNode,
+  createConversation,
+  failNode,
+  isTipNode,
+  prepareNodeRetry,
+} from "./conversation";
 
 const placeholderAnswer = "\\<answer zone\\>";
 
@@ -36,6 +45,8 @@ describe("linear conversation", () => {
       sequence: 0,
       question: "First question",
       answer: placeholderAnswer,
+      status: "completed",
+      errorCode: null,
     });
   });
 
@@ -60,5 +71,46 @@ describe("linear conversation", () => {
     expect(isTipNode(secondConversation, "node-0")).toBe(false);
     expect(isTipNode(secondConversation, "node-1")).toBe(true);
     expect(isTipNode(secondConversation, "missing-node")).toBe(false);
+  });
+
+  it("streams, completes, fails, and retries without replacing the question", () => {
+    const pending = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Keep this question",
+      status: "pending",
+    });
+    const streaming = appendAnswerDelta(pending, "node-0", "Partial answer");
+    const completed = completeNode(streaming, "node-0");
+    const failed = failNode(completed, "node-0", "provider_error");
+    const retried = prepareNodeRetry(failed, "node-0");
+
+    expect(streaming.nodes[0]).toMatchObject({
+      question: "Keep this question",
+      answer: "Partial answer",
+      status: "streaming",
+    });
+    expect(completed.nodes[0].status).toBe("completed");
+    expect(failed.nodes[0]).toMatchObject({ status: "failed", errorCode: "provider_error" });
+    expect(retried.nodes[0]).toMatchObject({
+      question: "Keep this question",
+      answer: "",
+      status: "pending",
+      errorCode: null,
+    });
+  });
+
+  it("builds context from completed turns and the current prompt", () => {
+    const first = appendQuestion(createConversation(), "node-0", "First question");
+    const second = appendNode(first, {
+      id: "node-1",
+      question: "Second question",
+      status: "pending",
+    });
+
+    expect(buildChatMessages(second, "node-1")).toEqual([
+      { role: "user", content: "First question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Second question" },
+    ]);
   });
 });

@@ -95,6 +95,38 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.node-status {
+  margin: 0;
+  color: #777771;
+}
+
+.node-error {
+  color: #8a2e2e;
+}
+
+.node-error p {
+  margin: 0;
+}
+
+.node-error button {
+  margin-top: 12px;
+  border: 1px solid #d5aaaa;
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: #702727;
+  background: #fffafa;
+  cursor: pointer;
+}
+
+.node-error button:hover {
+  background: #fff2f2;
+}
+
+.node-error button:focus-visible {
+  outline: 3px solid rgb(53 106 230 / 25%);
+  outline-offset: 2px;
+}
+
 .conversation-node__composer {
   border-top: 1px solid #e7e7e3;
 }
