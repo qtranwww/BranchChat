@@ -43,7 +43,8 @@ textarea {
   background-size: 24px 24px;
 }
 
-.initial-state {
+.initial-state,
+.node-demo {
   width: min(100%, 460px);
   display: grid;
   gap: 24px;
@@ -56,6 +57,104 @@ h1 {
   font-weight: 400;
   line-height: 1.12;
   text-align: center;
+}
+
+.conversation-node {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 14px 38px rgb(32 32 30 / 8%), 0 2px 8px rgb(32 32 30 / 4%);
+}
+
+.conversation-node__question,
+.conversation-node__answer {
+  padding: 20px 22px;
+  overflow-wrap: anywhere;
+}
+
+.conversation-node__question {
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.conversation-node__question p,
+.conversation-node__answer > :first-child {
+  margin-top: 0;
+}
+
+.conversation-node__question p,
+.conversation-node__answer > :last-child {
+  margin-bottom: 0;
+}
+
+.conversation-node__divider {
+  height: 1px;
+  margin-inline: 22px;
+  background: #e7e7e3;
+}
+
+.conversation-node__answer {
+  color: #343431;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.conversation-node__answer h2,
+.conversation-node__answer h3 {
+  margin: 1.35em 0 0.5em;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.conversation-node__answer h2 {
+  font-size: 1.2rem;
+}
+
+.conversation-node__answer h3 {
+  font-size: 1.05rem;
+}
+
+.conversation-node__answer ul,
+.conversation-node__answer ol {
+  margin: 0.8em 0;
+  padding-left: 1.4rem;
+}
+
+.conversation-node__answer li + li {
+  margin-top: 0.3em;
+}
+
+.conversation-node__answer a {
+  color: #315fc4;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.conversation-node__answer code {
+  border-radius: 5px;
+  background: #f1f1ee;
+  padding: 0.15em 0.35em;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+}
+
+.conversation-node__answer pre {
+  overflow-x: auto;
+  margin: 1em 0;
+  border: 1px solid #e4e4df;
+  border-radius: 10px;
+  background: #f6f6f3;
+  padding: 14px 16px;
+}
+
+.conversation-node__answer pre code {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  background: transparent;
+  line-height: 1.55;
 }
 
 .composer {
@@ -144,7 +243,8 @@ h1 {
     padding-top: 18vh;
   }
 
-  .initial-state {
+  .initial-state,
+  .node-demo {
     gap: 22px;
   }
 

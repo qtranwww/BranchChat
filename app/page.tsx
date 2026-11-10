@@ -1,12 +1,15 @@
-import { InitialComposer } from "@/components/initial-composer";
+import { ConversationNode } from "@/components/conversation-node";
+
+const sampleQuestion = "Ask anything";
+const sampleAnswer = "\\<answer zone\\>";
 
 export default function Home() {
   return (
     <main className="conversation-canvas">
-      <section className="initial-state" aria-labelledby="initial-prompt-title">
-        <h1 id="initial-prompt-title">BranchChat</h1>
+      <section className="node-demo" aria-labelledby="page-title">
+        <h1 id="page-title">BranchChat</h1>
 
-        <InitialComposer />
+        <ConversationNode question={sampleQuestion} answer={sampleAnswer} isTip />
       </section>
     </main>
   );
