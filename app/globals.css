@@ -43,9 +43,13 @@ textarea {
   background-size: 24px 24px;
 }
 
-.initial-state,
-.node-demo {
+.chat-experience {
   width: min(100%, 460px);
+  display: grid;
+  gap: 24px;
+}
+
+.conversation-stack {
   display: grid;
   gap: 24px;
 }
@@ -71,6 +75,10 @@ h1 {
 .conversation-node__answer {
   padding: 20px 22px;
   overflow-wrap: anywhere;
+}
+
+.conversation-node__composer {
+  border-top: 1px solid #e7e7e3;
 }
 
 .conversation-node__question {
@@ -159,16 +167,23 @@ h1 {
 
 .composer {
   overflow: hidden;
+  background: #ffffff;
+}
+
+.composer--standalone {
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: #ffffff;
   box-shadow: 0 14px 38px rgb(32 32 30 / 8%), 0 2px 8px rgb(32 32 30 / 4%);
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.composer:focus-within {
+.composer--standalone:focus-within {
   border-color: color-mix(in srgb, var(--focus) 50%, var(--border));
   box-shadow: 0 14px 38px rgb(32 32 30 / 8%), 0 0 0 3px rgb(53 106 230 / 12%);
+}
+
+.composer--embedded:focus-within {
+  box-shadow: inset 3px 0 0 rgb(53 106 230 / 35%);
 }
 
 .composer textarea {
@@ -182,6 +197,11 @@ h1 {
   color: var(--ink);
   background: transparent;
   line-height: 1.5;
+}
+
+.composer--embedded textarea {
+  min-height: 88px;
+  padding-top: 16px;
 }
 
 .composer textarea::placeholder {
@@ -211,6 +231,21 @@ h1 {
   border: 0;
   border-radius: 10px;
   color: #ffffff;
+  background: var(--ink);
+  cursor: pointer;
+  transition: background 140ms ease, opacity 140ms ease;
+}
+
+.composer-footer button:hover:not(:disabled) {
+  background: #383834;
+}
+
+.composer-footer button:focus-visible {
+  outline: 3px solid rgb(53 106 230 / 25%);
+  outline-offset: 2px;
+}
+
+.composer-footer button:disabled {
   background: #b8b8b3;
   cursor: not-allowed;
 }
@@ -243,8 +278,7 @@ h1 {
     padding-top: 18vh;
   }
 
-  .initial-state,
-  .node-demo {
+  .chat-experience {
     gap: 22px;
   }
 
