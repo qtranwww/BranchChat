@@ -37,6 +37,7 @@ const NODE_TOP = 112;
 const FALLBACK_NODE_HEIGHT = 240;
 const CANVAS_PADDING = 20;
 const CONTENT_BOTTOM_PADDING = 40;
+const CONTENT_SAFE_TOP = 92;
 
 type ConversationFlowNodeData = {
   chatNode: ChatNode;
@@ -166,7 +167,7 @@ export function ConversationFlow({
   const flowInstance = useRef<ReactFlowInstance<ConversationFlowNode, Edge> | null>(null);
   const viewport = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const lastAutoPannedNodeCount = useRef(0);
-  const lastCompletedScroll = useRef<{ nodeId: string; height: number } | null>(null);
+  const lastCompletedScroll = useRef<string | null>(null);
   const horizontalDrag = useRef<{
     pointerId: number;
     startClientX: number;
@@ -354,15 +355,14 @@ export function ConversationFlow({
       const tipHeight = nodeHeights[tipNode.id] ?? FALLBACK_NODE_HEIGHT;
       const tipTop = tipNode.position.y;
       const tipBottom = tipTop + tipHeight;
-      const safeTop = 92;
-      const visibleTop = container.scrollTop + safeTop;
+      const visibleTop = container.scrollTop + CONTENT_SAFE_TOP;
       const visibleBottom = container.scrollTop + container.clientHeight - 24;
       let nextScrollTop = container.scrollTop;
 
       if (tipBottom > visibleBottom) {
         nextScrollTop = tipBottom - container.clientHeight + 24;
       } else if (tipTop < visibleTop) {
-        nextScrollTop = Math.max(0, tipTop - safeTop);
+        nextScrollTop = Math.max(0, tipTop - CONTENT_SAFE_TOP);
       }
 
       if (nextScrollTop !== container.scrollTop) {
@@ -388,19 +388,31 @@ export function ConversationFlow({
       return;
     }
 
-    const tipHeight = nodeHeights[tipNode.id] ?? FALLBACK_NODE_HEIGHT;
-    const previousScroll = lastCompletedScroll.current;
-
-    if (previousScroll?.nodeId === tipNode.id && previousScroll.height === tipHeight) {
+    if (lastCompletedScroll.current === tipNode.id) {
       return;
     }
 
     const frame = requestAnimationFrame(() => {
-      const tipBottom = tipNode.position.y + tipHeight;
-      const nextScrollTop = Math.max(0, tipBottom - container.clientHeight + 24);
+      const nodeElement = container.querySelector(`[data-id="${tipNode.id}"]`);
+      const answerElement = nodeElement?.querySelector<HTMLElement>(
+        ".conversation-node__answer",
+      );
+
+      if (!answerElement) {
+        return;
+      }
+
+      const containerTop = container.getBoundingClientRect().top;
+      const answerTop =
+        container.scrollTop + answerElement.getBoundingClientRect().top - containerTop;
+      const nextScrollTop = Math.max(0, answerTop - CONTENT_SAFE_TOP);
+
+      if (container.scrollHeight - container.clientHeight < nextScrollTop) {
+        return;
+      }
 
       container.scrollTo({ top: nextScrollTop, behavior: "smooth" });
-      lastCompletedScroll.current = { nodeId: tipNode.id, height: tipHeight };
+      lastCompletedScroll.current = tipNode.id;
     });
 
     return () => cancelAnimationFrame(frame);
