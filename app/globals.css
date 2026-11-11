@@ -64,6 +64,15 @@ textarea {
 .conversation-flow {
   position: absolute;
   inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.conversation-flow__surface {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
 }
 
 .canvas-title {

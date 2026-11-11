@@ -2,7 +2,6 @@
 
 import {
   Handle,
-  PanOnScrollMode,
   Position,
   ReactFlow,
   type Edge,
@@ -19,6 +18,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 
 import { ConversationNode } from "@/components/conversation-node";
@@ -36,6 +36,7 @@ const NODE_WIDTH = 460;
 const NODE_TOP = 112;
 const FALLBACK_NODE_HEIGHT = 240;
 const CANVAS_PADDING = 20;
+const CONTENT_BOTTOM_PADDING = 40;
 
 type ConversationFlowNodeData = {
   chatNode: ChatNode;
@@ -165,6 +166,7 @@ export function ConversationFlow({
   const flowInstance = useRef<ReactFlowInstance<ConversationFlowNode, Edge> | null>(null);
   const viewport = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const lastAutoPannedNodeCount = useRef(0);
+  const lastCompletedScroll = useRef<{ nodeId: string; height: number } | null>(null);
   const horizontalDrag = useRef<{
     pointerId: number;
     startClientX: number;
@@ -181,7 +183,8 @@ export function ConversationFlow({
     }
 
     const updateSize = () => {
-      const { width, height } = container.getBoundingClientRect();
+      const width = container.clientWidth;
+      const height = container.clientHeight;
       setContainerSize({ width, height });
     };
     const observer = new ResizeObserver(updateSize);
@@ -219,6 +222,10 @@ export function ConversationFlow({
         id: chatNode.id,
         type: "conversation",
         position: { x: nodeX, y: nodeY },
+        measured: {
+          width: nodeWidth,
+          height: nodeHeights[chatNode.id] ?? FALLBACK_NODE_HEIGHT,
+        },
         style: { width: nodeWidth, pointerEvents: "all" },
         className: "nopan nodrag",
         draggable: false,
@@ -268,8 +275,8 @@ export function ConversationFlow({
   );
 
   const viewportBounds = useMemo(() => {
-    if (nodes.length === 0 || !containerSize.width || !containerSize.height) {
-      return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+    if (nodes.length === 0 || !containerSize.width) {
+      return { minX: 0, maxX: 0 };
     }
 
     const contentLeft = Math.min(...nodes.map((node) => node.position.x));
@@ -278,35 +285,37 @@ export function ConversationFlow({
     );
     const contentWidth = contentRight - contentLeft;
     const availableWidth = containerSize.width - CANVAS_PADDING * 2;
-    const contentBottom = Math.max(
-      ...nodes.map(
-        (node) =>
-          node.position.y + (nodeHeights[node.id] ?? FALLBACK_NODE_HEIGHT),
-      ),
-    );
-    const bottomAlignedY = containerSize.height - CANVAS_PADDING - contentBottom;
 
     if (contentWidth <= availableWidth) {
       return {
         minX: CANVAS_PADDING - contentLeft,
         maxX: containerSize.width - CANVAS_PADDING - contentRight,
-        minY: Math.min(0, bottomAlignedY),
-        maxY: 0,
       };
     }
 
     return {
       minX: containerSize.width - CANVAS_PADDING - contentRight,
       maxX: CANVAS_PADDING - contentLeft,
-      minY: Math.min(0, bottomAlignedY),
-      maxY: 0,
     };
-  }, [containerSize, nodeHeights, nodes, nodeWidth]);
+  }, [containerSize.width, nodes, nodeWidth]);
+
+  const contentHeight = useMemo(() => {
+    const contentBottom = nodes.reduce(
+      (bottom, node) =>
+        Math.max(
+          bottom,
+          node.position.y + (nodeHeights[node.id] ?? FALLBACK_NODE_HEIGHT),
+        ),
+      0,
+    );
+
+    return Math.max(containerSize.height, contentBottom + CONTENT_BOTTOM_PADDING, 1);
+  }, [containerSize.height, nodeHeights, nodes]);
 
   const constrainViewport = useCallback(
     (nextViewport: Viewport): Viewport => ({
       x: clamp(nextViewport.x, viewportBounds.minX, viewportBounds.maxX),
-      y: clamp(nextViewport.y, viewportBounds.minY, viewportBounds.maxY),
+      y: 0,
       zoom: 1,
     }),
     [viewportBounds],
@@ -329,36 +338,35 @@ export function ConversationFlow({
   }, [constrainViewport]);
 
   useEffect(() => {
+    const container = containerRef.current;
     const tipNode = nodes.at(-1);
     const nodeCount = conversation.nodes.length;
 
     if (
+      !container ||
       !tipNode ||
-      !containerSize.height ||
       nodeCount <= lastAutoPannedNodeCount.current
     ) {
       return;
     }
 
     const frame = requestAnimationFrame(() => {
-      const currentViewport = viewport.current;
       const tipHeight = nodeHeights[tipNode.id] ?? FALLBACK_NODE_HEIGHT;
-      const visibleTop = tipNode.position.y + currentViewport.y;
-      const visibleBottom = visibleTop + tipHeight;
+      const tipTop = tipNode.position.y;
+      const tipBottom = tipTop + tipHeight;
       const safeTop = 92;
-      const safeBottom = containerSize.height - 24;
-      let nextY = currentViewport.y;
+      const visibleTop = container.scrollTop + safeTop;
+      const visibleBottom = container.scrollTop + container.clientHeight - 24;
+      let nextScrollTop = container.scrollTop;
 
-      if (visibleBottom > safeBottom) {
-        nextY -= visibleBottom - safeBottom;
-      } else if (visibleTop < safeTop) {
-        nextY += safeTop - visibleTop;
+      if (tipBottom > visibleBottom) {
+        nextScrollTop = tipBottom - container.clientHeight + 24;
+      } else if (tipTop < visibleTop) {
+        nextScrollTop = Math.max(0, tipTop - safeTop);
       }
 
-      if (nextY !== currentViewport.y) {
-        const nextViewport = constrainViewport({ ...currentViewport, y: nextY, zoom: 1 });
-        viewport.current = nextViewport;
-        void flowInstance.current?.setViewport(nextViewport, { duration: 220 });
+      if (nextScrollTop !== container.scrollTop) {
+        container.scrollTo({ top: nextScrollTop, behavior: "smooth" });
       }
 
       lastAutoPannedNodeCount.current = nodeCount;
@@ -367,11 +375,36 @@ export function ConversationFlow({
     return () => cancelAnimationFrame(frame);
   }, [
     containerSize.height,
-    constrainViewport,
     conversation.nodes.length,
     nodeHeights,
     nodes,
   ]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const tipNode = nodes.at(-1);
+
+    if (!container || !tipNode || tipNode.data.chatNode.status !== "completed") {
+      return;
+    }
+
+    const tipHeight = nodeHeights[tipNode.id] ?? FALLBACK_NODE_HEIGHT;
+    const previousScroll = lastCompletedScroll.current;
+
+    if (previousScroll?.nodeId === tipNode.id && previousScroll.height === tipHeight) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      const tipBottom = tipNode.position.y + tipHeight;
+      const nextScrollTop = Math.max(0, tipBottom - container.clientHeight + 24);
+
+      container.scrollTo({ top: nextScrollTop, behavior: "smooth" });
+      lastCompletedScroll.current = { nodeId: tipNode.id, height: tipHeight };
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [nodeHeights, nodes]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (
@@ -418,6 +451,33 @@ export function ConversationFlow({
     }
   }
 
+  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    if (conversation.nodes.length === 0) {
+      return;
+    }
+
+    const horizontalDelta =
+      event.shiftKey && Math.abs(event.deltaX) < Math.abs(event.deltaY)
+        ? event.deltaY
+        : event.deltaX;
+    const isHorizontalGesture =
+      event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+
+    if (!isHorizontalGesture || horizontalDelta === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextViewport = constrainViewport({
+      ...viewport.current,
+      x: viewport.current.x - horizontalDelta,
+      zoom: 1,
+    });
+
+    viewport.current = nextViewport;
+    void flowInstance.current?.setViewport(nextViewport);
+  }
+
   return (
     <div
       ref={containerRef}
@@ -427,44 +487,46 @@ export function ConversationFlow({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
+      onWheel={handleWheel}
     >
-      <ReactFlow<ConversationFlowNode, Edge>
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-        onInit={(instance) => {
-          flowInstance.current = instance;
-        }}
-        onMove={(_, nextViewport) => {
-          const constrainedViewport = constrainViewport(nextViewport);
-          viewport.current = constrainedViewport;
+      <div className="conversation-flow__surface" style={{ height: contentHeight }}>
+        <ReactFlow<ConversationFlowNode, Edge>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          onInit={(instance) => {
+            flowInstance.current = instance;
+          }}
+          onMove={(_, nextViewport) => {
+            const constrainedViewport = constrainViewport(nextViewport);
+            viewport.current = constrainedViewport;
 
-          if (
-            constrainedViewport.x !== nextViewport.x ||
-            constrainedViewport.y !== nextViewport.y ||
-            nextViewport.zoom !== 1
-          ) {
-            void flowInstance.current?.setViewport(constrainedViewport);
-          }
-        }}
-        minZoom={1}
-        maxZoom={1}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        edgesFocusable={false}
-        nodesFocusable={false}
-        zoomOnScroll={false}
-        zoomOnPinch={false}
-        zoomOnDoubleClick={false}
-        panOnScroll={conversation.nodes.length > 0}
-        panOnScrollMode={PanOnScrollMode.Free}
-        panOnDrag={false}
-        preventScrolling
-        selectionOnDrag={false}
-        autoPanOnNodeFocus={false}
-      />
+            if (
+              constrainedViewport.x !== nextViewport.x ||
+              constrainedViewport.y !== nextViewport.y ||
+              nextViewport.zoom !== 1
+            ) {
+              void flowInstance.current?.setViewport(constrainedViewport);
+            }
+          }}
+          minZoom={1}
+          maxZoom={1}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          edgesFocusable={false}
+          nodesFocusable={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+          panOnScroll={false}
+          panOnDrag={false}
+          preventScrolling={false}
+          selectionOnDrag={false}
+          autoPanOnNodeFocus={false}
+        />
+      </div>
     </div>
   );
 }
