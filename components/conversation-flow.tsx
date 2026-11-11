@@ -22,7 +22,14 @@ import {
 } from "react";
 
 import { ConversationNode } from "@/components/conversation-node";
-import { isTipNode, type ChatNode, type ConversationState } from "@/lib/conversation";
+import { BranchDraft } from "@/components/branch-draft";
+import {
+  canBranchFromNode,
+  isTipNode,
+  type BranchSide,
+  type ChatNode,
+  type ConversationState,
+} from "@/lib/conversation";
 
 const NODE_GAP = 28;
 const NODE_WIDTH = 460;
@@ -35,6 +42,9 @@ type ConversationFlowNodeData = {
   isTip: boolean;
   composer?: ReactNode;
   onRetry?: () => void;
+  branchDraftSide: BranchSide | null;
+  onOpenBranchDraft: (side: BranchSide) => void;
+  onCloseBranchDraft: () => void;
   onHeightChange: (nodeId: string, height: number) => void;
 };
 
@@ -44,10 +54,15 @@ type ConversationFlowProps = {
   conversation: ConversationState;
   renderComposer: (node: ChatNode) => ReactNode;
   onRetry: (nodeId: string) => void;
+  branchDraft: { nodeId: string; side: BranchSide } | null;
+  onOpenBranchDraft: (nodeId: string, side: BranchSide) => void;
+  onCloseBranchDraft: () => void;
 };
 
 function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
   const elementRef = useRef<HTMLDivElement>(null);
+  const leftButtonRef = useRef<HTMLButtonElement>(null);
+  const rightButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -65,8 +80,22 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
     return () => observer.disconnect();
   }, [data, id]);
 
+  function closeBranchDraft() {
+    const trigger =
+      data.branchDraftSide === "left" ? leftButtonRef.current : rightButtonRef.current;
+
+    data.onCloseBranchDraft();
+    requestAnimationFrame(() => trigger?.focus());
+  }
+
+  const canBranch = canBranchFromNode(data.chatNode);
+
   return (
-    <div ref={elementRef} className="conversation-flow-node nopan nodrag">
+    <div
+      ref={elementRef}
+      className="conversation-flow-node nopan nodrag"
+      data-branch-open={data.branchDraftSide ?? undefined}
+    >
       {data.chatNode.sequence > 0 ? (
         <Handle type="target" position={Position.Top} isConnectable={false} />
       ) : null}
@@ -79,6 +108,35 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
         onRetry={data.onRetry}
         composer={data.composer}
       />
+
+      {canBranch ? (
+        <div className="branch-actions" aria-label="Branch actions">
+          <button
+            ref={leftButtonRef}
+            type="button"
+            className="branch-action branch-action--left"
+            aria-label="Draft a left branch"
+            aria-expanded={data.branchDraftSide === "left"}
+            onClick={() => data.onOpenBranchDraft("left")}
+          >
+            +
+          </button>
+          <button
+            ref={rightButtonRef}
+            type="button"
+            className="branch-action branch-action--right"
+            aria-label="Draft a right branch"
+            aria-expanded={data.branchDraftSide === "right"}
+            onClick={() => data.onOpenBranchDraft("right")}
+          >
+            +
+          </button>
+        </div>
+      ) : null}
+
+      {data.branchDraftSide ? (
+        <BranchDraft nodeId={id} side={data.branchDraftSide} onDismiss={closeBranchDraft} />
+      ) : null}
 
       {!data.isTip ? (
         <Handle type="source" position={Position.Bottom} isConnectable={false} />
@@ -99,6 +157,9 @@ export function ConversationFlow({
   conversation,
   renderComposer,
   onRetry,
+  branchDraft,
+  onOpenBranchDraft,
+  onCloseBranchDraft,
 }: ConversationFlowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const flowInstance = useRef<ReactFlowInstance<ConversationFlowNode, Edge> | null>(null);
@@ -169,13 +230,28 @@ export function ConversationFlow({
           isTip,
           composer: isTip ? renderComposer(chatNode) : undefined,
           onRetry: isTip ? () => onRetry(chatNode.id) : undefined,
+          branchDraftSide:
+            branchDraft?.nodeId === chatNode.id ? branchDraft.side : null,
+          onOpenBranchDraft: (side) => onOpenBranchDraft(chatNode.id, side),
+          onCloseBranchDraft,
           onHeightChange: handleHeightChange,
         },
       };
 
       return node;
     });
-  }, [conversation, handleHeightChange, nodeHeights, nodeWidth, nodeX, onRetry, renderComposer]);
+  }, [
+    branchDraft,
+    conversation,
+    handleHeightChange,
+    nodeHeights,
+    nodeWidth,
+    nodeX,
+    onCloseBranchDraft,
+    onOpenBranchDraft,
+    onRetry,
+    renderComposer,
+  ]);
 
   const edges = useMemo(
     () =>

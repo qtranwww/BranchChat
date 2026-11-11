@@ -12,15 +12,22 @@ import {
   createConversation,
   failNode,
   prepareNodeRetry,
+  type BranchSide,
   type ChatNode,
   type ConversationState,
 } from "@/lib/conversation";
 
 const genericErrorCode = "generation_failed";
 
+type BranchDraftState = {
+  nodeId: string;
+  side: BranchSide;
+};
+
 export function ChatExperience() {
   const [conversation, setConversation] = useState<ConversationState>(createConversation);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
+  const [branchDraft, setBranchDraft] = useState<BranchDraftState | null>(null);
   const nextNodeId = useRef(0);
 
   async function streamAnswer(targetConversation: ConversationState, nodeId: string) {
@@ -132,6 +139,9 @@ export function ChatExperience() {
         conversation={conversation}
         renderComposer={renderTipComposer}
         onRetry={retryNode}
+        branchDraft={branchDraft}
+        onOpenBranchDraft={(nodeId, side) => setBranchDraft({ nodeId, side })}
+        onCloseBranchDraft={() => setBranchDraft(null)}
       />
 
       {conversation.nodes.length === 0 ? (

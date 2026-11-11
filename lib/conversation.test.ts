@@ -4,6 +4,7 @@ import {
   appendAnswerDelta,
   appendNode,
   buildChatMessages,
+  canBranchFromNode,
   completeNode,
   createConversation,
   failNode,
@@ -112,5 +113,21 @@ describe("linear conversation", () => {
       { role: "assistant", content: placeholderAnswer },
       { role: "user", content: "Second question" },
     ]);
+  });
+
+  it("allows branching only from completed nodes", () => {
+    const completed = appendQuestion(createConversation(), "node-0", "Completed question");
+    const pending = appendNode(createConversation(), {
+      id: "node-1",
+      question: "Pending question",
+      status: "pending",
+    });
+    const streaming = appendAnswerDelta(pending, "node-1", "Partial answer");
+    const failed = failNode(pending, "node-1", "provider_error");
+
+    expect(canBranchFromNode(completed.nodes[0])).toBe(true);
+    expect(canBranchFromNode(pending.nodes[0])).toBe(false);
+    expect(canBranchFromNode(streaming.nodes[0])).toBe(false);
+    expect(canBranchFromNode(failed.nodes[0])).toBe(false);
   });
 });

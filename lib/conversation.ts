@@ -1,4 +1,5 @@
 export type NodeStatus = "pending" | "streaming" | "completed" | "failed";
+export type BranchSide = "left" | "right";
 
 export type ChatNode = {
   id: string;
@@ -145,4 +146,8 @@ export function buildChatMessages(
 
 export function isTipNode(conversation: ConversationState, nodeId: string): boolean {
   return conversation.nodes.at(-1)?.id === nodeId;
+}
+
+export function canBranchFromNode(node: ChatNode): boolean {
+  return node.status === "completed";
 }
