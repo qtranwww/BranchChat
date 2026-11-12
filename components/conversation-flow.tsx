@@ -324,7 +324,7 @@ export function ConversationFlow({
       conversation.nodes.flatMap<Edge>((chatNode) => {
         const style = {
           stroke: branchStrokes.get(chatNode.branchId) ?? getBranchStroke(0),
-          strokeWidth: 2,
+          strokeWidth: 4,
         };
 
         if (chatNode.previousNodeId) {
