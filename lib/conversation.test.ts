@@ -257,6 +257,46 @@ describe("linear conversation", () => {
     ]);
   });
 
+  it("creates a nested branch from a completed child node", () => {
+    const main = appendQuestion(createConversation(), "node-0", "Main question");
+    const child = createChildBranch(main, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Child question",
+      answer: "Child answer",
+      status: "completed",
+    });
+    const nested = createChildBranch(child, {
+      branchId: "branch-1",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Nested question",
+    });
+
+    expect(nested.branches.at(-1)).toMatchObject({
+      id: "branch-1",
+      originNodeId: "node-1",
+      side: "right",
+      siblingOrder: 0,
+    });
+    expect(nested.nodes.at(-1)).toMatchObject({
+      id: "node-2",
+      branchId: "branch-1",
+      previousNodeId: null,
+      sequence: 0,
+    });
+    expect(buildChatMessages(nested, "node-2")).toEqual([
+      { role: "user", content: "Main question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Child question" },
+      { role: "assistant", content: "Child answer" },
+      { role: "user", content: "Nested question" },
+    ]);
+  });
+
   it("allows branching only from completed nodes", () => {
     const completed = appendQuestion(createConversation(), "node-0", "Completed question");
     const pending = appendNode(createConversation(), {

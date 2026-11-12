@@ -31,7 +31,6 @@ import {
 import {
   canBranchFromNode,
   isTipNode,
-  MAIN_BRANCH_ID,
   type BranchSide,
   type ChatNode,
   type ConversationState,
@@ -274,8 +273,7 @@ export function ConversationFlow({
         data: {
           chatNode,
           isTip,
-          canBranch:
-            chatNode.branchId === MAIN_BRANCH_ID && canBranchFromNode(chatNode),
+          canBranch: canBranchFromNode(chatNode),
           composer: isTip ? renderComposer(chatNode) : undefined,
           onRetry:
             chatNode.status === "failed" ? () => onRetry(chatNode.id) : undefined,

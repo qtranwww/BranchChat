@@ -160,6 +160,41 @@ describe("conversation layout", () => {
     ]).toEqual([-80, -660, -1240]);
   });
 
+  it("places a nested branch in the next lane without collision handling", () => {
+    const main = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Main",
+    });
+    const child = createChildBranch(main, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Child",
+      status: "completed",
+    });
+    const nested = createChildBranch(child, {
+      branchId: "branch-1",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Nested",
+    });
+    const positions = layoutConversation({
+      conversation: nested,
+      mainX: 500,
+      nodeWidth: 460,
+      nodeTop: 112,
+      nodeGap: 28,
+      fallbackNodeHeight: 240,
+      nodeHeights: {},
+    });
+
+    expect(positions["node-1"].x).toBe(-80);
+    expect(positions["node-2"].x).toBe(1080);
+    expect(positions["node-2"].y).toBe(408);
+  });
+
   it("lets either outermost node move to the center of the viewport", () => {
     const positions = {
       left: { x: -90, y: 112 },
