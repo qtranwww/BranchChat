@@ -19,7 +19,6 @@ html,
 body {
   min-height: 100%;
   margin: 0;
-  overscroll-behavior-x: none;
 }
 
 body {
@@ -67,8 +66,7 @@ textarea {
   inset: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior-x: none;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: contain;
 }
 
 .conversation-flow__surface {
