@@ -4,6 +4,9 @@ import {
 } from "./conversation";
 
 const BRANCH_LANE_GAP = 120;
+const FIRST_BRANCH_HUE = 210;
+const GOLDEN_ANGLE = 137.508;
+const MAIN_BRANCH_STROKE = "#716f69";
 
 export type NodePosition = {
   x: number;
@@ -14,6 +17,18 @@ export type HorizontalViewportBounds = {
   minX: number;
   maxX: number;
 };
+
+export function getBranchStroke(branchIndex: number): string {
+  if (branchIndex <= 0) {
+    return MAIN_BRANCH_STROKE;
+  }
+
+  const hue = Math.round(
+    (FIRST_BRANCH_HUE + (branchIndex - 1) * GOLDEN_ANGLE) % 360,
+  );
+
+  return `hsl(${hue} 62% 38%)`;
+}
 
 type LayoutConversationInput = {
   conversation: ConversationState;

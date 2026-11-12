@@ -24,6 +24,7 @@ import {
 import { ConversationNode } from "@/components/conversation-node";
 import { BranchDraft } from "@/components/branch-draft";
 import {
+  getBranchStroke,
   getHorizontalViewportBounds,
   layoutConversation,
 } from "@/lib/conversation-layout";
@@ -320,9 +321,25 @@ export function ConversationFlow({
     renderComposer,
   ]);
 
+  const branchStrokes = useMemo(
+    () =>
+      new Map(
+        conversation.branches.map((branch, index) => [
+          branch.id,
+          getBranchStroke(index),
+        ]),
+      ),
+    [conversation.branches],
+  );
+
   const edges = useMemo(
     () =>
       conversation.nodes.flatMap<Edge>((chatNode) => {
+        const style = {
+          stroke: branchStrokes.get(chatNode.branchId) ?? getBranchStroke(0),
+          strokeWidth: 2,
+        };
+
         if (chatNode.previousNodeId) {
           return [
             {
@@ -332,7 +349,7 @@ export function ConversationFlow({
               target: chatNode.id,
               targetHandle: "linear-target",
               type: "straight",
-              style: { stroke: "#aaa9a3", strokeWidth: 2 },
+              style,
             },
           ];
         }
@@ -355,11 +372,11 @@ export function ConversationFlow({
             target: chatNode.id,
             targetHandle: isLeft ? "branch-target-right" : "branch-target-left",
             type: "straight",
-            style: { stroke: "#aaa9a3", strokeWidth: 2 },
+            style,
           },
         ];
       }),
-    [conversation.branches, conversation.nodes],
+    [branchStrokes, conversation.branches, conversation.nodes],
   );
 
   const viewportBounds = useMemo(() => {

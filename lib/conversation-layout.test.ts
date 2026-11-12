@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getBranchStroke,
   getHorizontalViewportBounds,
   layoutConversation,
 } from "./conversation-layout";
@@ -11,6 +12,14 @@ import {
 } from "./conversation";
 
 describe("conversation layout", () => {
+  it("assigns stable, distinct connector colors to branches", () => {
+    const colors = Array.from({ length: 12 }, (_, index) => getBranchStroke(index));
+
+    expect(colors[0]).toBe("#716f69");
+    expect(new Set(colors)).toHaveLength(colors.length);
+    expect(colors.slice(1).every((color) => color.endsWith("62% 38%)"))).toBe(true);
+  });
+
   it("places child branches on the selected side of their origin", () => {
     const main = appendNode(createConversation(), {
       id: "node-0",
