@@ -50,19 +50,25 @@ export function layoutConversation({
   nodeHeights,
 }: LayoutConversationInput): Readonly<Record<string, NodePosition>> {
   const positions: Record<string, NodePosition> = {};
+  let leftLane = 0;
+  let rightLane = 0;
 
   for (const branch of conversation.branches) {
     const branchNodes = conversation.nodes
       .filter((node) => node.branchId === branch.id)
       .sort((first, second) => first.sequence - second.sequence);
     const originPosition = branch.originNodeId ? positions[branch.originNodeId] : undefined;
-    const direction = branch.side === "left" ? -1 : 1;
-    const laneDistance =
-      (branch.siblingOrder + 1) * (nodeWidth + BRANCH_LANE_GAP);
-    const branchX =
-      branch.id === MAIN_BRANCH_ID || !originPosition
-        ? mainX
-        : originPosition.x + direction * laneDistance;
+    let lane = 0;
+
+    if (branch.id !== MAIN_BRANCH_ID && branch.side === "left") {
+      leftLane -= 1;
+      lane = leftLane;
+    } else if (branch.id !== MAIN_BRANCH_ID && branch.side === "right") {
+      rightLane += 1;
+      lane = rightLane;
+    }
+
+    const branchX = mainX + lane * (nodeWidth + BRANCH_LANE_GAP);
     const branchTop = originPosition?.y ?? nodeTop;
     let nextY = branchTop;
 

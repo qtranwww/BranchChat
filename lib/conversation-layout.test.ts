@@ -55,6 +55,59 @@ describe("conversation layout", () => {
     expect(positions["node-right"].y).toBe(positions["node-0"].y);
   });
 
+  it("assigns a unique global lane to every flat branch", () => {
+    const firstMain = appendNode(createConversation(), {
+      id: "node-0",
+      question: "First main node",
+    });
+    const main = appendNode(firstMain, {
+      id: "node-1",
+      question: "Second main node",
+    });
+    const firstLeft = createChildBranch(main, {
+      branchId: "branch-left-0",
+      nodeId: "node-left-0",
+      originNodeId: "node-0",
+      side: "left",
+      question: "First left branch",
+    });
+    const secondLeft = createChildBranch(firstLeft, {
+      branchId: "branch-left-1",
+      nodeId: "node-left-1",
+      originNodeId: "node-1",
+      side: "left",
+      question: "Second left branch",
+    });
+    const firstRight = createChildBranch(secondLeft, {
+      branchId: "branch-right-0",
+      nodeId: "node-right-0",
+      originNodeId: "node-0",
+      side: "right",
+      question: "First right branch",
+    });
+    const allBranches = createChildBranch(firstRight, {
+      branchId: "branch-right-1",
+      nodeId: "node-right-1",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Second right branch",
+    });
+    const positions = layoutConversation({
+      conversation: allBranches,
+      mainX: 500,
+      nodeWidth: 460,
+      nodeTop: 112,
+      nodeGap: 28,
+      fallbackNodeHeight: 240,
+      nodeHeights: {},
+    });
+
+    expect(positions["node-left-0"].x).toBe(-80);
+    expect(positions["node-left-1"].x).toBe(-660);
+    expect(positions["node-right-0"].x).toBe(1080);
+    expect(positions["node-right-1"].x).toBe(1660);
+  });
+
   it("lets either outermost node move to the center of the viewport", () => {
     const positions = {
       left: { x: -90, y: 112 },
