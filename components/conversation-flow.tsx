@@ -112,19 +112,6 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
         position={Position.Top}
         isConnectable={false}
       />
-      <Handle
-        id="branch-target-left"
-        type="target"
-        position={Position.Left}
-        isConnectable={false}
-      />
-      <Handle
-        id="branch-target-right"
-        type="target"
-        position={Position.Right}
-        isConnectable={false}
-      />
-
       <ConversationNode
         question={data.chatNode.question}
         answer={data.chatNode.answer}
@@ -370,7 +357,7 @@ export function ConversationFlow({
             source: branch.originNodeId,
             sourceHandle: isLeft ? "branch-source-left" : "branch-source-right",
             target: chatNode.id,
-            targetHandle: isLeft ? "branch-target-right" : "branch-target-left",
+            targetHandle: "linear-target",
             type: "straight",
             style,
           },

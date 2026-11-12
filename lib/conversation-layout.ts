@@ -69,7 +69,12 @@ export function layoutConversation({
     }
 
     const branchX = mainX + lane * (nodeWidth + BRANCH_LANE_GAP);
-    const branchTop = originPosition?.y ?? nodeTop;
+    const originHeight = branch.originNodeId
+      ? nodeHeights[branch.originNodeId] ?? fallbackNodeHeight
+      : 0;
+    const branchTop = originPosition
+      ? originPosition.y + originHeight / 2 + nodeGap
+      : nodeTop;
     let nextY = branchTop;
 
     for (const node of branchNodes) {

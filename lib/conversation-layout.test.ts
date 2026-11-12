@@ -46,13 +46,13 @@ describe("conversation layout", () => {
       nodeTop: 112,
       nodeGap: 28,
       fallbackNodeHeight: 240,
-      nodeHeights: {},
+      nodeHeights: { "node-0": 800 },
     });
 
     expect(positions["node-left"].x).toBeLessThan(positions["node-0"].x);
     expect(positions["node-right"].x).toBeGreaterThan(positions["node-0"].x);
-    expect(positions["node-left"].y).toBe(positions["node-0"].y);
-    expect(positions["node-right"].y).toBe(positions["node-0"].y);
+    expect(positions["node-left"].y).toBe(540);
+    expect(positions["node-right"].y).toBe(540);
   });
 
   it("assigns a unique global lane to every flat branch", () => {
