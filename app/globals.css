@@ -19,6 +19,7 @@ html,
 body {
   min-height: 100%;
   margin: 0;
+  overscroll-behavior-x: none;
 }
 
 body {
@@ -66,7 +67,8 @@ textarea {
   inset: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
 }
 
 .conversation-flow__surface {
@@ -125,8 +127,6 @@ textarea {
 }
 
 .conversation-flow-node:hover .branch-action,
-.conversation-flow-node:focus-within .branch-action,
-.conversation-flow-node[data-branch-open] .branch-action,
 .branch-action:focus-visible {
   opacity: 1;
   transform: translateY(-50%) scale(1);

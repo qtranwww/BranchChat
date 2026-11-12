@@ -23,7 +23,10 @@ import {
 
 import { ConversationNode } from "@/components/conversation-node";
 import { BranchDraft } from "@/components/branch-draft";
-import { layoutConversation } from "@/lib/conversation-layout";
+import {
+  getHorizontalViewportBounds,
+  layoutConversation,
+} from "@/lib/conversation-layout";
 import {
   canBranchFromNode,
   isTipNode,
@@ -370,29 +373,12 @@ export function ConversationFlow({
   );
 
   const viewportBounds = useMemo(() => {
-    if (nodes.length === 0 || !containerSize.width) {
-      return { minX: 0, maxX: 0 };
-    }
-
-    const contentLeft = Math.min(...nodes.map((node) => node.position.x));
-    const contentRight = Math.max(
-      ...nodes.map((node) => node.position.x + (node.width ?? nodeWidth)),
+    return getHorizontalViewportBounds(
+      nodePositions,
+      containerSize.width,
+      nodeWidth,
     );
-    const contentWidth = contentRight - contentLeft;
-    const availableWidth = containerSize.width - CANVAS_PADDING * 2;
-
-    if (contentWidth <= availableWidth) {
-      return {
-        minX: CANVAS_PADDING - contentLeft,
-        maxX: containerSize.width - CANVAS_PADDING - contentRight,
-      };
-    }
-
-    return {
-      minX: containerSize.width - CANVAS_PADDING - contentRight,
-      maxX: CANVAS_PADDING - contentLeft,
-    };
-  }, [containerSize.width, nodes, nodeWidth]);
+  }, [containerSize.width, nodePositions, nodeWidth]);
 
   const contentHeight = useMemo(() => {
     const contentBottom = nodes.reduce(

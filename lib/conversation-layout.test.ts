@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { layoutConversation } from "./conversation-layout";
+import {
+  getHorizontalViewportBounds,
+  layoutConversation,
+} from "./conversation-layout";
 import {
   appendNode,
   createChildBranch,
@@ -41,5 +44,18 @@ describe("conversation layout", () => {
     expect(positions["node-right"].x).toBeGreaterThan(positions["node-0"].x);
     expect(positions["node-left"].y).toBe(positions["node-0"].y);
     expect(positions["node-right"].y).toBe(positions["node-0"].y);
+  });
+
+  it("lets either outermost node move to the center of the viewport", () => {
+    const positions = {
+      left: { x: -90, y: 112 },
+      main: { x: 490, y: 112 },
+      right: { x: 1070, y: 112 },
+    };
+
+    expect(getHorizontalViewportBounds(positions, 1440, 460)).toEqual({
+      minX: -580,
+      maxX: 580,
+    });
   });
 });

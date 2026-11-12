@@ -10,6 +10,11 @@ export type NodePosition = {
   y: number;
 };
 
+export type HorizontalViewportBounds = {
+  minX: number;
+  maxX: number;
+};
+
 type LayoutConversationInput = {
   conversation: ConversationState;
   mainX: number;
@@ -53,4 +58,25 @@ export function layoutConversation({
   }
 
   return positions;
+}
+
+export function getHorizontalViewportBounds(
+  positions: Readonly<Record<string, NodePosition>>,
+  viewportWidth: number,
+  nodeWidth: number,
+): HorizontalViewportBounds {
+  const nodeCenters = Object.values(positions).map(
+    (position) => position.x + nodeWidth / 2,
+  );
+
+  if (nodeCenters.length === 0 || viewportWidth === 0) {
+    return { minX: 0, maxX: 0 };
+  }
+
+  const viewportCenter = viewportWidth / 2;
+
+  return {
+    minX: viewportCenter - Math.max(...nodeCenters),
+    maxX: viewportCenter - Math.min(...nodeCenters),
+  };
 }
