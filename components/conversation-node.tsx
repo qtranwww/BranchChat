@@ -41,7 +41,7 @@ export function ConversationNode({
         {status === "failed" ? (
           <div className="node-error" role="alert">
             <p>The answer could not be generated.</p>
-            {isTip && onRetry ? (
+            {onRetry ? (
               <button type="button" onClick={onRetry}>
                 Retry
               </button>

@@ -23,9 +23,11 @@ import {
 
 import { ConversationNode } from "@/components/conversation-node";
 import { BranchDraft } from "@/components/branch-draft";
+import { layoutConversation } from "@/lib/conversation-layout";
 import {
   canBranchFromNode,
   isTipNode,
+  MAIN_BRANCH_ID,
   type BranchSide,
   type ChatNode,
   type ConversationState,
@@ -42,10 +44,13 @@ const CONTENT_SAFE_TOP = 92;
 type ConversationFlowNodeData = {
   chatNode: ChatNode;
   isTip: boolean;
+  canBranch: boolean;
   composer?: ReactNode;
   onRetry?: () => void;
   branchDraftSide: BranchSide | null;
+  branchSubmissionDisabled: boolean;
   onOpenBranchDraft: (side: BranchSide) => void;
+  onSubmitBranchDraft: (side: BranchSide, prompt: string) => void;
   onCloseBranchDraft: () => void;
   onHeightChange: (nodeId: string, height: number) => void;
 };
@@ -58,7 +63,9 @@ type ConversationFlowProps = {
   onRetry: (nodeId: string) => void;
   branchDraft: { nodeId: string; side: BranchSide } | null;
   onOpenBranchDraft: (nodeId: string, side: BranchSide) => void;
+  onSubmitBranchDraft: (nodeId: string, side: BranchSide, prompt: string) => void;
   onCloseBranchDraft: () => void;
+  branchSubmissionDisabled: boolean;
 };
 
 function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
@@ -90,17 +97,30 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
     requestAnimationFrame(() => trigger?.focus());
   }
 
-  const canBranch = canBranchFromNode(data.chatNode);
-
   return (
     <div
       ref={elementRef}
       className="conversation-flow-node nopan nodrag"
       data-branch-open={data.branchDraftSide ?? undefined}
     >
-      {data.chatNode.sequence > 0 ? (
-        <Handle type="target" position={Position.Top} isConnectable={false} />
-      ) : null}
+      <Handle
+        id="linear-target"
+        type="target"
+        position={Position.Top}
+        isConnectable={false}
+      />
+      <Handle
+        id="branch-target-left"
+        type="target"
+        position={Position.Left}
+        isConnectable={false}
+      />
+      <Handle
+        id="branch-target-right"
+        type="target"
+        position={Position.Right}
+        isConnectable={false}
+      />
 
       <ConversationNode
         question={data.chatNode.question}
@@ -111,7 +131,7 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
         composer={data.composer}
       />
 
-      {canBranch ? (
+      {data.canBranch ? (
         <div className="branch-actions" aria-label="Branch actions">
           <button
             ref={leftButtonRef}
@@ -137,12 +157,33 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
       ) : null}
 
       {data.branchDraftSide ? (
-        <BranchDraft nodeId={id} side={data.branchDraftSide} onDismiss={closeBranchDraft} />
+        <BranchDraft
+          nodeId={id}
+          side={data.branchDraftSide}
+          disabled={data.branchSubmissionDisabled}
+          onSubmit={(prompt) => data.onSubmitBranchDraft(data.branchDraftSide!, prompt)}
+          onDismiss={closeBranchDraft}
+        />
       ) : null}
 
-      {!data.isTip ? (
-        <Handle type="source" position={Position.Bottom} isConnectable={false} />
-      ) : null}
+      <Handle
+        id="linear-source"
+        type="source"
+        position={Position.Bottom}
+        isConnectable={false}
+      />
+      <Handle
+        id="branch-source-left"
+        type="source"
+        position={Position.Left}
+        isConnectable={false}
+      />
+      <Handle
+        id="branch-source-right"
+        type="source"
+        position={Position.Right}
+        isConnectable={false}
+      />
     </div>
   );
 }
@@ -161,7 +202,9 @@ export function ConversationFlow({
   onRetry,
   branchDraft,
   onOpenBranchDraft,
+  onSubmitBranchDraft,
   onCloseBranchDraft,
+  branchSubmissionDisabled,
 }: ConversationFlowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const flowInstance = useRef<ReactFlowInstance<ConversationFlowNode, Edge> | null>(null);
@@ -210,19 +253,29 @@ export function ConversationFlow({
     ? Math.min(NODE_WIDTH, Math.max(240, containerSize.width - 40))
     : NODE_WIDTH;
   const nodeX = containerSize.width ? Math.max(20, (containerSize.width - nodeWidth) / 2) : 0;
+  const nodePositions = useMemo(
+    () =>
+      layoutConversation({
+        conversation,
+        mainX: nodeX,
+        nodeWidth,
+        nodeTop: NODE_TOP,
+        nodeGap: NODE_GAP,
+        fallbackNodeHeight: FALLBACK_NODE_HEIGHT,
+        nodeHeights,
+      }),
+    [conversation, nodeHeights, nodeWidth, nodeX],
+  );
 
   const nodes = useMemo(() => {
-    return conversation.nodes.map<ConversationFlowNode>((chatNode, index) => {
-      const isTip = isTipNode(conversation, chatNode.id);
-      const nodeY = conversation.nodes.slice(0, index).reduce(
-        (position, previousNode) =>
-          position + (nodeHeights[previousNode.id] ?? FALLBACK_NODE_HEIGHT) + NODE_GAP,
-        NODE_TOP,
-      );
+    return conversation.nodes.map<ConversationFlowNode>((chatNode) => {
+      const isTip =
+        chatNode.branchId === MAIN_BRANCH_ID && isTipNode(conversation, chatNode.id);
+      const position = nodePositions[chatNode.id] ?? { x: nodeX, y: NODE_TOP };
       const node: ConversationFlowNode = {
         id: chatNode.id,
         type: "conversation",
-        position: { x: nodeX, y: nodeY },
+        position,
         measured: {
           width: nodeWidth,
           height: nodeHeights[chatNode.id] ?? FALLBACK_NODE_HEIGHT,
@@ -236,11 +289,17 @@ export function ConversationFlow({
         data: {
           chatNode,
           isTip,
+          canBranch:
+            chatNode.branchId === MAIN_BRANCH_ID && canBranchFromNode(chatNode),
           composer: isTip ? renderComposer(chatNode) : undefined,
-          onRetry: isTip ? () => onRetry(chatNode.id) : undefined,
+          onRetry:
+            chatNode.status === "failed" ? () => onRetry(chatNode.id) : undefined,
           branchDraftSide:
             branchDraft?.nodeId === chatNode.id ? branchDraft.side : null,
+          branchSubmissionDisabled,
           onOpenBranchDraft: (side) => onOpenBranchDraft(chatNode.id, side),
+          onSubmitBranchDraft: (side, prompt) =>
+            onSubmitBranchDraft(chatNode.id, side, prompt),
           onCloseBranchDraft,
           onHeightChange: handleHeightChange,
         },
@@ -250,29 +309,64 @@ export function ConversationFlow({
     });
   }, [
     branchDraft,
+    branchSubmissionDisabled,
     conversation,
     handleHeightChange,
     nodeHeights,
     nodeWidth,
     nodeX,
+    nodePositions,
     onCloseBranchDraft,
     onOpenBranchDraft,
     onRetry,
+    onSubmitBranchDraft,
     renderComposer,
   ]);
 
   const edges = useMemo(
     () =>
-      conversation.nodes.slice(1).map<Edge>((chatNode, index) => ({
-        id: `edge-${conversation.nodes[index].id}-${chatNode.id}`,
-        source: conversation.nodes[index].id,
-        target: chatNode.id,
-        type: "straight",
-        focusable: false,
-        selectable: false,
-        style: { stroke: "#aaa9a3", strokeWidth: 2 },
-      })),
-    [conversation.nodes],
+      conversation.nodes.flatMap<Edge>((chatNode) => {
+        if (chatNode.previousNodeId) {
+          return [
+            {
+              id: `edge-${chatNode.previousNodeId}-${chatNode.id}`,
+              source: chatNode.previousNodeId,
+              sourceHandle: "linear-source",
+              target: chatNode.id,
+              targetHandle: "linear-target",
+              type: "straight",
+              focusable: false,
+              selectable: false,
+              style: { stroke: "#aaa9a3", strokeWidth: 2 },
+            },
+          ];
+        }
+
+        const branch = conversation.branches.find(
+          (candidate) => candidate.id === chatNode.branchId,
+        );
+
+        if (!branch?.originNodeId || !branch.side) {
+          return [];
+        }
+
+        const isLeft = branch.side === "left";
+
+        return [
+          {
+            id: `edge-${branch.originNodeId}-${chatNode.id}`,
+            source: branch.originNodeId,
+            sourceHandle: isLeft ? "branch-source-left" : "branch-source-right",
+            target: chatNode.id,
+            targetHandle: isLeft ? "branch-target-right" : "branch-target-left",
+            type: "straight",
+            focusable: false,
+            selectable: false,
+            style: { stroke: "#aaa9a3", strokeWidth: 2 },
+          },
+        ];
+      }),
+    [conversation.branches, conversation.nodes],
   );
 
   const viewportBounds = useMemo(() => {
@@ -369,14 +463,33 @@ export function ConversationFlow({
         container.scrollTo({ top: nextScrollTop, behavior: "smooth" });
       }
 
+      const currentViewport = viewport.current;
+      const visibleLeft = tipNode.position.x + currentViewport.x;
+      const visibleRight = visibleLeft + nodeWidth;
+      let nextX = currentViewport.x;
+
+      if (visibleLeft < CANVAS_PADDING) {
+        nextX += CANVAS_PADDING - visibleLeft;
+      } else if (visibleRight > container.clientWidth - CANVAS_PADDING) {
+        nextX -= visibleRight - (container.clientWidth - CANVAS_PADDING);
+      }
+
+      if (nextX !== currentViewport.x) {
+        const nextViewport = constrainViewport({ ...currentViewport, x: nextX });
+        viewport.current = nextViewport;
+        void flowInstance.current?.setViewport(nextViewport, { duration: 220 });
+      }
+
       lastAutoPannedNodeCount.current = nodeCount;
     });
 
     return () => cancelAnimationFrame(frame);
   }, [
     containerSize.height,
+    constrainViewport,
     conversation.nodes.length,
     nodeHeights,
+    nodeWidth,
     nodes,
   ]);
 

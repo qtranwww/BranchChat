@@ -8,6 +8,7 @@ type ComposerProps = {
   placeholder: string;
   variant: "standalone" | "embedded";
   autoFocus?: boolean;
+  disabled?: boolean;
   onSubmit: (prompt: string) => void;
 };
 
@@ -17,16 +18,17 @@ export function Composer({
   placeholder,
   variant,
   autoFocus = false,
+  disabled = false,
   onSubmit,
 }: ComposerProps) {
   const [prompt, setPrompt] = useState("");
   const submissionLocked = useRef(false);
-  const canSubmit = prompt.trim().length > 0;
+  const canSubmit = prompt.trim().length > 0 && !disabled;
 
   function submitPrompt() {
     const submittedPrompt = prompt.trim();
 
-    if (!submittedPrompt || submissionLocked.current) {
+    if (!submittedPrompt || disabled || submissionLocked.current) {
       return;
     }
 
@@ -66,6 +68,7 @@ export function Composer({
         placeholder={placeholder}
         rows={variant === "standalone" ? 3 : 2}
         autoFocus={autoFocus}
+        disabled={disabled}
       />
       <div className="composer-footer">
         <span>Enter to send · Shift+Enter for a new line</span>

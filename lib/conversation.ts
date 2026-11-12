@@ -1,8 +1,20 @@
 export type NodeStatus = "pending" | "streaming" | "completed" | "failed";
 export type BranchSide = "left" | "right";
 
+export const MAIN_BRANCH_ID = "branch-main";
+const MAX_CONTEXT_MESSAGES = 41;
+
+export type Branch = {
+  id: string;
+  originNodeId: string | null;
+  side: BranchSide | null;
+  siblingOrder: number;
+};
+
 export type ChatNode = {
   id: string;
+  branchId: string;
+  previousNodeId: string | null;
   sequence: number;
   question: string;
   answer: string;
@@ -11,11 +23,23 @@ export type ChatNode = {
 };
 
 export type ConversationState = {
+  branches: readonly Branch[];
   nodes: readonly ChatNode[];
 };
 
 export type AppendNodeInput = {
   id: string;
+  branchId?: string;
+  question: string;
+  answer?: string;
+  status?: NodeStatus;
+};
+
+export type CreateChildBranchInput = {
+  branchId: string;
+  nodeId: string;
+  originNodeId: string;
+  side: BranchSide;
   question: string;
   answer?: string;
   status?: NodeStatus;
@@ -27,7 +51,17 @@ export type ChatMessage = {
 };
 
 export function createConversation(): ConversationState {
-  return { nodes: [] };
+  return {
+    branches: [
+      {
+        id: MAIN_BRANCH_ID,
+        originNodeId: null,
+        side: null,
+        siblingOrder: 0,
+      },
+    ],
+    nodes: [],
+  };
 }
 
 export function appendNode(
@@ -35,14 +69,20 @@ export function appendNode(
   input: AppendNodeInput,
 ): ConversationState {
   const question = input.question.trim();
+  const branchId = input.branchId ?? MAIN_BRANCH_ID;
+  const branchExists = conversation.branches.some((branch) => branch.id === branchId);
 
-  if (!question) {
+  if (!question || !branchExists) {
     return conversation;
   }
 
+  const branchNodes = conversation.nodes.filter((node) => node.branchId === branchId);
+  const previousNode = branchNodes.at(-1);
   const node: ChatNode = {
     id: input.id,
-    sequence: conversation.nodes.length,
+    branchId,
+    previousNodeId: previousNode?.id ?? null,
+    sequence: branchNodes.length,
     question,
     answer: input.answer ?? "",
     status: input.status ?? "completed",
@@ -50,6 +90,46 @@ export function appendNode(
   };
 
   return {
+    ...conversation,
+    nodes: [...conversation.nodes, node],
+  };
+}
+
+export function createChildBranch(
+  conversation: ConversationState,
+  input: CreateChildBranchInput,
+): ConversationState {
+  const question = input.question.trim();
+  const originNode = conversation.nodes.find((node) => node.id === input.originNodeId);
+  const branchIdExists = conversation.branches.some((branch) => branch.id === input.branchId);
+
+  if (!question || !originNode || originNode.status !== "completed" || branchIdExists) {
+    return conversation;
+  }
+
+  const siblingOrder = conversation.branches.filter(
+    (branch) =>
+      branch.originNodeId === input.originNodeId && branch.side === input.side,
+  ).length;
+  const branch: Branch = {
+    id: input.branchId,
+    originNodeId: input.originNodeId,
+    side: input.side,
+    siblingOrder,
+  };
+  const node: ChatNode = {
+    id: input.nodeId,
+    branchId: branch.id,
+    previousNodeId: null,
+    sequence: 0,
+    question,
+    answer: input.answer ?? "",
+    status: input.status ?? "pending",
+    errorCode: null,
+  };
+
+  return {
+    branches: [...conversation.branches, branch],
     nodes: [...conversation.nodes, node],
   };
 }
@@ -69,7 +149,7 @@ function updateNode(
     return updater(node);
   });
 
-  return changed ? { nodes } : conversation;
+  return changed ? { ...conversation, nodes } : conversation;
 }
 
 export function appendAnswerDelta(
@@ -117,19 +197,42 @@ export function prepareNodeRetry(
   }));
 }
 
+function getContextNodes(
+  conversation: ConversationState,
+  targetNodeId: string,
+  visitedBranches = new Set<string>(),
+): ChatNode[] {
+  const targetNode = conversation.nodes.find((node) => node.id === targetNodeId);
+
+  if (!targetNode || visitedBranches.has(targetNode.branchId)) {
+    return [];
+  }
+
+  const branch = conversation.branches.find((candidate) => candidate.id === targetNode.branchId);
+
+  if (!branch) {
+    return [];
+  }
+
+  const nextVisitedBranches = new Set(visitedBranches).add(branch.id);
+  const inheritedNodes = branch.originNodeId
+    ? getContextNodes(conversation, branch.originNodeId, nextVisitedBranches)
+    : [];
+  const ownNodes = conversation.nodes
+    .filter((node) => node.branchId === branch.id && node.sequence <= targetNode.sequence)
+    .sort((first, second) => first.sequence - second.sequence);
+
+  return [...inheritedNodes, ...ownNodes];
+}
+
 export function buildChatMessages(
   conversation: ConversationState,
   targetNodeId: string,
 ): ChatMessage[] {
-  const targetIndex = conversation.nodes.findIndex((node) => node.id === targetNodeId);
-
-  if (targetIndex === -1) {
-    return [];
-  }
-
+  const contextNodes = getContextNodes(conversation, targetNodeId);
   const messages: ChatMessage[] = [];
 
-  for (const node of conversation.nodes.slice(0, targetIndex + 1)) {
+  for (const node of contextNodes) {
     messages.push({ role: "user", content: node.question });
 
     if (node.id === targetNodeId) {
@@ -141,11 +244,17 @@ export function buildChatMessages(
     }
   }
 
-  return messages;
+  return messages.slice(-MAX_CONTEXT_MESSAGES);
 }
 
 export function isTipNode(conversation: ConversationState, nodeId: string): boolean {
-  return conversation.nodes.at(-1)?.id === nodeId;
+  const node = conversation.nodes.find((candidate) => candidate.id === nodeId);
+
+  if (!node) {
+    return false;
+  }
+
+  return conversation.nodes.filter((candidate) => candidate.branchId === node.branchId).at(-1)?.id === nodeId;
 }
 
 export function canBranchFromNode(node: ChatNode): boolean {

@@ -9,6 +9,7 @@ import {
   appendNode,
   buildChatMessages,
   completeNode,
+  createChildBranch,
   createConversation,
   failNode,
   prepareNodeRetry,
@@ -29,6 +30,7 @@ export function ChatExperience() {
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [branchDraft, setBranchDraft] = useState<BranchDraftState | null>(null);
   const nextNodeId = useRef(0);
+  const nextBranchId = useRef(0);
 
   async function streamAnswer(targetConversation: ConversationState, nodeId: string) {
     setActiveNodeId(nodeId);
@@ -120,6 +122,32 @@ export function ChatExperience() {
     void streamAnswer(retryConversation, nodeId);
   }
 
+  function addChildBranch(originNodeId: string, side: BranchSide, question: string) {
+    if (activeNodeId) {
+      return;
+    }
+
+    const nodeId = `node-${nextNodeId.current}`;
+    const branchId = `branch-${nextBranchId.current}`;
+    const nextConversation = createChildBranch(conversation, {
+      branchId,
+      nodeId,
+      originNodeId,
+      side,
+      question,
+    });
+
+    if (nextConversation === conversation) {
+      return;
+    }
+
+    setConversation(nextConversation);
+    setBranchDraft(null);
+    nextNodeId.current += 1;
+    nextBranchId.current += 1;
+    void streamAnswer(nextConversation, nodeId);
+  }
+
   function renderTipComposer(node: ChatNode) {
     return (
       <Composer
@@ -128,6 +156,7 @@ export function ChatExperience() {
         placeholder="Next question..."
         variant="embedded"
         autoFocus
+        disabled={activeNodeId !== null}
         onSubmit={addNode}
       />
     );
@@ -142,6 +171,8 @@ export function ChatExperience() {
         branchDraft={branchDraft}
         onOpenBranchDraft={(nodeId, side) => setBranchDraft({ nodeId, side })}
         onCloseBranchDraft={() => setBranchDraft(null)}
+        onSubmitBranchDraft={addChildBranch}
+        branchSubmissionDisabled={activeNodeId !== null}
       />
 
       {conversation.nodes.length === 0 ? (

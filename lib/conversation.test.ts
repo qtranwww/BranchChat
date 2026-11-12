@@ -6,9 +6,11 @@ import {
   buildChatMessages,
   canBranchFromNode,
   completeNode,
+  createChildBranch,
   createConversation,
   failNode,
   isTipNode,
+  MAIN_BRANCH_ID,
   prepareNodeRetry,
 } from "./conversation";
 
@@ -43,6 +45,8 @@ describe("linear conversation", () => {
     expect(conversation.nodes).toHaveLength(1);
     expect(conversation.nodes[0]).toEqual({
       id: "node-0",
+      branchId: MAIN_BRANCH_ID,
+      previousNodeId: null,
       sequence: 0,
       question: "First question",
       answer: placeholderAnswer,
@@ -113,6 +117,95 @@ describe("linear conversation", () => {
       { role: "assistant", content: placeholderAnswer },
       { role: "user", content: "Second question" },
     ]);
+  });
+
+  it("creates a child branch and its first node without changing the parent branch", () => {
+    const parentConversation = appendQuestion(
+      createConversation(),
+      "node-0",
+      "Parent question",
+    );
+    const parentNode = parentConversation.nodes[0];
+    const branchedConversation = createChildBranch(parentConversation, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: parentNode.id,
+      side: "left",
+      question: "Branch question",
+    });
+
+    expect(branchedConversation.nodes[0]).toBe(parentNode);
+    expect(branchedConversation.branches.at(-1)).toEqual({
+      id: "branch-0",
+      originNodeId: "node-0",
+      side: "left",
+      siblingOrder: 0,
+    });
+    expect(branchedConversation.nodes.at(-1)).toMatchObject({
+      id: "node-1",
+      branchId: "branch-0",
+      previousNodeId: null,
+      sequence: 0,
+      question: "Branch question",
+      status: "pending",
+    });
+  });
+
+  it("assigns stable sibling order independently on each side", () => {
+    const parentConversation = appendQuestion(
+      createConversation(),
+      "node-0",
+      "Parent question",
+    );
+    const firstLeft = createChildBranch(parentConversation, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "First left",
+    });
+    const secondLeft = createChildBranch(firstLeft, {
+      branchId: "branch-1",
+      nodeId: "node-2",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Second left",
+    });
+    const firstRight = createChildBranch(secondLeft, {
+      branchId: "branch-2",
+      nodeId: "node-3",
+      originNodeId: "node-0",
+      side: "right",
+      question: "First right",
+    });
+
+    expect(firstRight.branches.slice(1).map((branch) => branch.siblingOrder)).toEqual([
+      0,
+      1,
+      0,
+    ]);
+  });
+
+  it("uses the parent path through the origin as child branch context", () => {
+    const first = appendQuestion(createConversation(), "node-0", "First parent question");
+    const second = appendQuestion(first, "node-1", "Origin question");
+    const child = createChildBranch(second, {
+      branchId: "branch-0",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Child question",
+    });
+
+    expect(buildChatMessages(child, "node-2")).toEqual([
+      { role: "user", content: "First parent question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Origin question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Child question" },
+    ]);
+    expect(isTipNode(child, "node-1")).toBe(true);
+    expect(isTipNode(child, "node-2")).toBe(true);
   });
 
   it("allows branching only from completed nodes", () => {
