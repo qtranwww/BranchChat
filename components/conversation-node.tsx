@@ -20,13 +20,11 @@ export function ConversationNode({
   composer,
   onRetry,
 }: ConversationNodeProps) {
-  const variantClass = isTip ? "conversation-node--tip" : "conversation-node--standard";
   const isGenerating = status === "pending" || status === "streaming";
 
   return (
     <article
-      className={`conversation-node ${variantClass}`}
-      data-tip={isTip || undefined}
+      className="conversation-node"
       aria-busy={isGenerating}
     >
       <div className="conversation-node__question">

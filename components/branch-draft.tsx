@@ -55,7 +55,6 @@ export function BranchDraft({
   return (
     <form
       className={`branch-draft branch-draft--${side}`}
-      data-side={side}
       onSubmit={handleSubmit}
     >
       <label className="sr-only" htmlFor={`branch-draft-${nodeId}-${side}`}>

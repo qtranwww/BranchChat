@@ -188,11 +188,9 @@ export function ChatExperience() {
           />
         </div>
       ) : (
-        <>
-          <h1 id="page-title" className="canvas-title">
-            BranchChat
-          </h1>
-        </>
+        <h1 id="page-title" className="canvas-title">
+          BranchChat
+        </h1>
       )}
     </section>
   );

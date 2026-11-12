@@ -104,7 +104,6 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
     <div
       ref={elementRef}
       className="conversation-flow-node nopan nodrag"
-      data-branch-open={data.branchDraftSide ?? undefined}
     >
       <Handle
         id="linear-target"
@@ -285,10 +284,6 @@ export function ConversationFlow({
         },
         style: { width: nodeWidth, pointerEvents: "all" },
         className: "nopan nodrag",
-        draggable: false,
-        selectable: false,
-        connectable: false,
-        focusable: false,
         data: {
           chatNode,
           isTip,
@@ -338,8 +333,6 @@ export function ConversationFlow({
               target: chatNode.id,
               targetHandle: "linear-target",
               type: "straight",
-              focusable: false,
-              selectable: false,
               style: { stroke: "#aaa9a3", strokeWidth: 2 },
             },
           ];
@@ -363,8 +356,6 @@ export function ConversationFlow({
             target: chatNode.id,
             targetHandle: isLeft ? "branch-target-right" : "branch-target-left",
             type: "straight",
-            focusable: false,
-            selectable: false,
             style: { stroke: "#aaa9a3", strokeWidth: 2 },
           },
         ];
