@@ -208,6 +208,42 @@ describe("linear conversation", () => {
     expect(isTipNode(child, "node-2")).toBe(true);
   });
 
+  it("continues a child branch without changing the parent branch tip", () => {
+    const parent = appendQuestion(createConversation(), "node-0", "Parent question");
+    const child = createChildBranch(parent, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "First child question",
+      answer: "First child answer",
+      status: "completed",
+    });
+    const continued = appendNode(child, {
+      id: "node-2",
+      branchId: "branch-0",
+      question: "Second child question",
+      status: "pending",
+    });
+
+    expect(continued.nodes.at(-1)).toMatchObject({
+      id: "node-2",
+      branchId: "branch-0",
+      previousNodeId: "node-1",
+      sequence: 1,
+    });
+    expect(isTipNode(continued, "node-0")).toBe(true);
+    expect(isTipNode(continued, "node-1")).toBe(false);
+    expect(isTipNode(continued, "node-2")).toBe(true);
+    expect(buildChatMessages(continued, "node-2")).toEqual([
+      { role: "user", content: "Parent question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "First child question" },
+      { role: "assistant", content: "First child answer" },
+      { role: "user", content: "Second child question" },
+    ]);
+  });
+
   it("allows branching only from completed nodes", () => {
     const completed = appendQuestion(createConversation(), "node-0", "Completed question");
     const pending = appendNode(createConversation(), {

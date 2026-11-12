@@ -12,6 +12,7 @@ import {
   createChildBranch,
   createConversation,
   failNode,
+  MAIN_BRANCH_ID,
   prepareNodeRetry,
   type BranchSide,
   type ChatNode,
@@ -95,7 +96,7 @@ export function ChatExperience() {
     }
   }
 
-  function addNode(question: string) {
+  function addNode(question: string, branchId = MAIN_BRANCH_ID) {
     if (activeNodeId) {
       return;
     }
@@ -103,6 +104,7 @@ export function ChatExperience() {
     const id = `node-${nextNodeId.current}`;
     const nextConversation = appendNode(conversation, {
       id,
+      branchId,
       question,
       status: "pending",
     });
@@ -155,9 +157,9 @@ export function ChatExperience() {
         label="Ask a follow-up question"
         placeholder="Next question..."
         variant="embedded"
-        autoFocus
+        autoFocus={conversation.branches.length === 1}
         disabled={activeNodeId !== null}
-        onSubmit={addNode}
+        onSubmit={(prompt) => addNode(prompt, node.branchId)}
       />
     );
   }

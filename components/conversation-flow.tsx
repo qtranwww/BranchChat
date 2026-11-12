@@ -271,8 +271,7 @@ export function ConversationFlow({
 
   const nodes = useMemo(() => {
     return conversation.nodes.map<ConversationFlowNode>((chatNode) => {
-      const isTip =
-        chatNode.branchId === MAIN_BRANCH_ID && isTipNode(conversation, chatNode.id);
+      const isTip = isTipNode(conversation, chatNode.id);
       const position = nodePositions[chatNode.id] ?? { x: nodeX, y: NODE_TOP };
       const node: ConversationFlowNode = {
         id: chatNode.id,
