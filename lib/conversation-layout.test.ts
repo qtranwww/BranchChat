@@ -108,6 +108,58 @@ describe("conversation layout", () => {
     expect(positions["node-right-1"].x).toBe(1660);
   });
 
+  it("keeps three same-origin siblings in stable outward lanes", () => {
+    const main = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Origin",
+    });
+    const first = createChildBranch(main, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "First sibling",
+    });
+    const second = createChildBranch(first, {
+      branchId: "branch-1",
+      nodeId: "node-2",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Second sibling",
+    });
+    const third = createChildBranch(second, {
+      branchId: "branch-2",
+      nodeId: "node-3",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Third sibling",
+    });
+    const input = {
+      conversation: third,
+      mainX: 500,
+      nodeWidth: 460,
+      nodeTop: 112,
+      nodeGap: 28,
+      fallbackNodeHeight: 240,
+    };
+    const positions = layoutConversation({ ...input, nodeHeights: {} });
+    const measuredPositions = layoutConversation({
+      ...input,
+      nodeHeights: { "node-0": 800, "node-1": 400 },
+    });
+
+    expect([
+      positions["node-1"].x,
+      positions["node-2"].x,
+      positions["node-3"].x,
+    ]).toEqual([-80, -660, -1240]);
+    expect([
+      measuredPositions["node-1"].x,
+      measuredPositions["node-2"].x,
+      measuredPositions["node-3"].x,
+    ]).toEqual([-80, -660, -1240]);
+  });
+
   it("lets either outermost node move to the center of the viewport", () => {
     const positions = {
       left: { x: -90, y: 112 },

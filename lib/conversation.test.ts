@@ -171,17 +171,30 @@ describe("linear conversation", () => {
       side: "left",
       question: "Second left",
     });
-    const firstRight = createChildBranch(secondLeft, {
+    const thirdLeft = createChildBranch(secondLeft, {
       branchId: "branch-2",
       nodeId: "node-3",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Third left",
+    });
+    const firstRight = createChildBranch(thirdLeft, {
+      branchId: "branch-3",
+      nodeId: "node-4",
       originNodeId: "node-0",
       side: "right",
       question: "First right",
     });
+    const updated = appendAnswerDelta(firstRight, "node-2", "Answer update");
 
-    expect(firstRight.branches.slice(1).map((branch) => branch.siblingOrder)).toEqual([
+    expect(firstRight.branches.slice(1).map((branch) => branch.siblingOrder)).toEqual(
+      [0, 1, 2, 0],
+    );
+    expect(updated.branches).toBe(firstRight.branches);
+    expect(updated.branches.slice(1).map((branch) => branch.siblingOrder)).toEqual([
       0,
       1,
+      2,
       0,
     ]);
   });
