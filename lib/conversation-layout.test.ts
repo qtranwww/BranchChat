@@ -55,7 +55,7 @@ describe("conversation layout", () => {
     expect(positions["node-right"].y).toBe(540);
   });
 
-  it("assigns a unique global lane to every flat branch", () => {
+  it("inserts a lane beside each flat branch origin", () => {
     const firstMain = appendNode(createConversation(), {
       id: "node-0",
       question: "First main node",
@@ -102,10 +102,10 @@ describe("conversation layout", () => {
       nodeHeights: {},
     });
 
-    expect(positions["node-left-0"].x).toBe(-80);
-    expect(positions["node-left-1"].x).toBe(-660);
-    expect(positions["node-right-0"].x).toBe(1080);
-    expect(positions["node-right-1"].x).toBe(1660);
+    expect(positions["node-left-0"].x).toBe(-660);
+    expect(positions["node-left-1"].x).toBe(-80);
+    expect(positions["node-right-0"].x).toBe(1660);
+    expect(positions["node-right-1"].x).toBe(1080);
   });
 
   it("keeps three same-origin siblings in stable outward lanes", () => {
@@ -160,7 +160,7 @@ describe("conversation layout", () => {
     ]).toEqual([-80, -660, -1240]);
   });
 
-  it("places a nested branch in the next lane without collision handling", () => {
+  it("inserts an inward nested branch between its origin and main", () => {
     const main = appendNode(createConversation(), {
       id: "node-0",
       question: "Main",
@@ -190,9 +190,93 @@ describe("conversation layout", () => {
       nodeHeights: {},
     });
 
-    expect(positions["node-1"].x).toBe(-80);
-    expect(positions["node-2"].x).toBe(1080);
+    expect(positions["node-1"].x).toBe(-660);
+    expect(positions["node-2"].x).toBe(-80);
     expect(positions["node-2"].y).toBe(408);
+  });
+
+  it("places a later sibling outside an existing nested subtree", () => {
+    const main = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Main",
+    });
+    const firstChild = createChildBranch(main, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "First child",
+      status: "completed",
+    });
+    const nested = createChildBranch(firstChild, {
+      branchId: "branch-1",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "left",
+      question: "Nested child",
+    });
+    const laterSibling = createChildBranch(nested, {
+      branchId: "branch-2",
+      nodeId: "node-3",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Later sibling",
+    });
+    const positions = layoutConversation({
+      conversation: laterSibling,
+      mainX: 500,
+      nodeWidth: 460,
+      nodeTop: 112,
+      nodeGap: 28,
+      fallbackNodeHeight: 240,
+      nodeHeights: {},
+    });
+
+    expect(positions["node-1"].x).toBe(-80);
+    expect(positions["node-2"].x).toBe(-660);
+    expect(positions["node-3"].x).toBe(-1240);
+  });
+
+  it("mirrors nested subtree reservation on the right", () => {
+    const main = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Main",
+    });
+    const firstChild = createChildBranch(main, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "right",
+      question: "First child",
+      status: "completed",
+    });
+    const nested = createChildBranch(firstChild, {
+      branchId: "branch-1",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Nested child",
+    });
+    const laterSibling = createChildBranch(nested, {
+      branchId: "branch-2",
+      nodeId: "node-3",
+      originNodeId: "node-0",
+      side: "right",
+      question: "Later sibling",
+    });
+    const positions = layoutConversation({
+      conversation: laterSibling,
+      mainX: 500,
+      nodeWidth: 460,
+      nodeTop: 112,
+      nodeGap: 28,
+      fallbackNodeHeight: 240,
+      nodeHeights: {},
+    });
+
+    expect(positions["node-1"].x).toBe(1080);
+    expect(positions["node-2"].x).toBe(1660);
+    expect(positions["node-3"].x).toBe(2240);
   });
 
   it("lets either outermost node move to the center of the viewport", () => {

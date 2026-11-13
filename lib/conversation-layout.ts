@@ -1,5 +1,6 @@
 import {
   MAIN_BRANCH_ID,
+  type Branch,
   type ConversationState,
 } from "./conversation";
 
@@ -40,6 +41,110 @@ type LayoutConversationInput = {
   nodeHeights: Readonly<Record<string, number>>;
 };
 
+function getBranchLanes(conversation: ConversationState): ReadonlyMap<string, number> {
+  const lanes = new Map<string, number>([[MAIN_BRANCH_ID, 0]]);
+  const nodeBranches = new Map(
+    conversation.nodes.map((node) => [node.id, node.branchId]),
+  );
+  const parentBranches = new Map<string, string>();
+
+  for (const branch of conversation.branches) {
+    if (!branch.originNodeId) {
+      continue;
+    }
+
+    const parentBranchId = nodeBranches.get(branch.originNodeId);
+
+    if (parentBranchId) {
+      parentBranches.set(branch.id, parentBranchId);
+    }
+  }
+
+  function belongsToSubtree(branchId: string, rootBranchId: string) {
+    let currentBranchId: string | undefined = branchId;
+    const visited = new Set<string>();
+
+    while (currentBranchId && !visited.has(currentBranchId)) {
+      if (currentBranchId === rootBranchId) {
+        return true;
+      }
+
+      visited.add(currentBranchId);
+      currentBranchId = parentBranches.get(currentBranchId);
+    }
+
+    return false;
+  }
+
+  function getSiblingSubtreeBoundary(
+    siblings: readonly Branch[],
+    side: "left" | "right",
+  ) {
+    const subtreeLanes = [...lanes].flatMap(([branchId, lane]) =>
+      siblings.some((sibling) => belongsToSubtree(branchId, sibling.id))
+        ? [lane]
+        : [],
+    );
+
+    if (subtreeLanes.length === 0) {
+      return undefined;
+    }
+
+    return side === "left"
+      ? Math.min(...subtreeLanes)
+      : Math.max(...subtreeLanes);
+  }
+
+  for (const [branchIndex, branch] of conversation.branches.entries()) {
+    if (
+      branch.id === MAIN_BRANCH_ID ||
+      !branch.originNodeId ||
+      !branch.side
+    ) {
+      continue;
+    }
+
+    const originBranchId = nodeBranches.get(branch.originNodeId);
+    const originLane = originBranchId ? lanes.get(originBranchId) : undefined;
+
+    if (originLane === undefined) {
+      continue;
+    }
+
+    const earlierSiblings = conversation.branches
+      .slice(0, branchIndex)
+      .filter(
+        (candidate) =>
+          candidate.originNodeId === branch.originNodeId &&
+          candidate.side === branch.side,
+      );
+    const siblingBoundary = getSiblingSubtreeBoundary(
+      earlierSiblings,
+      branch.side,
+    );
+    const candidateLane =
+      siblingBoundary === undefined
+        ? originLane + (branch.side === "left" ? -1 : 1)
+        : siblingBoundary + (branch.side === "left" ? -1 : 1);
+
+    for (const [branchId, lane] of lanes) {
+      if (branch.side === "left" && lane <= candidateLane) {
+        lanes.set(branchId, lane - 1);
+      } else if (branch.side === "right" && lane >= candidateLane) {
+        lanes.set(branchId, lane + 1);
+      }
+    }
+
+    lanes.set(branch.id, candidateLane);
+  }
+
+  const mainLane = lanes.get(MAIN_BRANCH_ID) ?? 0;
+
+  return new Map(
+    [...lanes].map(([branchId, lane]) => [branchId, lane - mainLane]),
+  );
+}
+
 export function layoutConversation({
   conversation,
   mainX,
@@ -50,23 +155,14 @@ export function layoutConversation({
   nodeHeights,
 }: LayoutConversationInput): Readonly<Record<string, NodePosition>> {
   const positions: Record<string, NodePosition> = {};
-  let leftLane = 0;
-  let rightLane = 0;
+  const branchLanes = getBranchLanes(conversation);
 
   for (const branch of conversation.branches) {
     const branchNodes = conversation.nodes
       .filter((node) => node.branchId === branch.id)
       .sort((first, second) => first.sequence - second.sequence);
     const originPosition = branch.originNodeId ? positions[branch.originNodeId] : undefined;
-    let lane = 0;
-
-    if (branch.id !== MAIN_BRANCH_ID && branch.side === "left") {
-      leftLane -= 1;
-      lane = leftLane;
-    } else if (branch.id !== MAIN_BRANCH_ID && branch.side === "right") {
-      rightLane += 1;
-      lane = rightLane;
-    }
+    const lane = branchLanes.get(branch.id) ?? 0;
 
     const branchX = mainX + lane * (nodeWidth + BRANCH_LANE_GAP);
     const originHeight = branch.originNodeId
