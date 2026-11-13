@@ -220,7 +220,12 @@ function getContextNodes(
     : [];
   const ownNodes = conversation.nodes
     .filter((node) => node.branchId === branch.id && node.sequence <= targetNode.sequence)
-    .sort((first, second) => first.sequence - second.sequence);
+    .sort((first, second) => first.sequence - second.sequence)
+    .filter(
+      (node) =>
+        node.id === targetNodeId ||
+        (node.status === "completed" && Boolean(node.answer.trim())),
+    );
 
   return [...inheritedNodes, ...ownNodes];
 }

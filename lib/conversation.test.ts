@@ -119,6 +119,46 @@ describe("linear conversation", () => {
     ]);
   });
 
+  it("excludes incomplete and failed earlier turns from context", () => {
+    const completed = appendQuestion(
+      createConversation(),
+      "node-0",
+      "Completed question",
+    );
+    const failedPending = appendNode(completed, {
+      id: "node-1",
+      question: "Failed question",
+      status: "pending",
+    });
+    const failed = failNode(failedPending, "node-1", "provider_error");
+    const pending = appendNode(failed, {
+      id: "node-2",
+      question: "Pending question",
+      status: "pending",
+    });
+    const streamingPending = appendNode(pending, {
+      id: "node-3",
+      question: "Streaming question",
+      status: "pending",
+    });
+    const streaming = appendAnswerDelta(
+      streamingPending,
+      "node-3",
+      "Partial answer",
+    );
+    const target = appendNode(streaming, {
+      id: "node-4",
+      question: "Current question",
+      status: "pending",
+    });
+
+    expect(buildChatMessages(target, "node-4")).toEqual([
+      { role: "user", content: "Completed question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Current question" },
+    ]);
+  });
+
   it("creates a child branch and its first node without changing the parent branch", () => {
     const parentConversation = appendQuestion(
       createConversation(),
@@ -221,6 +261,51 @@ describe("linear conversation", () => {
     expect(isTipNode(child, "node-2")).toBe(true);
   });
 
+  it("stops parent context at the origin and excludes sibling branches", () => {
+    const first = appendQuestion(createConversation(), "node-0", "First parent");
+    const origin = appendQuestion(first, "node-1", "Fork origin");
+    const child = createChildBranch(origin, {
+      branchId: "branch-0",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "left",
+      question: "First child",
+      answer: "First child answer",
+      status: "completed",
+    });
+    const extendedParent = appendNode(child, {
+      id: "node-3",
+      question: "Later parent question",
+      answer: "Later parent answer",
+      status: "completed",
+    });
+    const sibling = createChildBranch(extendedParent, {
+      branchId: "branch-1",
+      nodeId: "node-4",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Sibling secret",
+      answer: "Sibling secret answer",
+      status: "completed",
+    });
+    const target = appendNode(sibling, {
+      id: "node-5",
+      branchId: "branch-0",
+      question: "Second child",
+      status: "pending",
+    });
+
+    expect(buildChatMessages(target, "node-5")).toEqual([
+      { role: "user", content: "First parent" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Fork origin" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "First child" },
+      { role: "assistant", content: "First child answer" },
+      { role: "user", content: "Second child" },
+    ]);
+  });
+
   it("continues a child branch without changing the parent branch tip", () => {
     const parent = appendQuestion(createConversation(), "node-0", "Parent question");
     const child = createChildBranch(parent, {
@@ -294,6 +379,52 @@ describe("linear conversation", () => {
       { role: "user", content: "Child question" },
       { role: "assistant", content: "Child answer" },
       { role: "user", content: "Nested question" },
+    ]);
+  });
+
+  it("builds nested context through ancestors without sibling leakage", () => {
+    const main = appendQuestion(createConversation(), "node-0", "Main question");
+    const child = createChildBranch(main, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "First child",
+      answer: "First child answer",
+      status: "completed",
+    });
+    const childOrigin = appendNode(child, {
+      id: "node-2",
+      branchId: "branch-0",
+      question: "Nested origin",
+      answer: "Nested origin answer",
+      status: "completed",
+    });
+    const unrelatedSibling = createChildBranch(childOrigin, {
+      branchId: "branch-1",
+      nodeId: "node-3",
+      originNodeId: "node-1",
+      side: "right",
+      question: "Unrelated nested sibling",
+      answer: "Unrelated answer",
+      status: "completed",
+    });
+    const nested = createChildBranch(unrelatedSibling, {
+      branchId: "branch-2",
+      nodeId: "node-4",
+      originNodeId: "node-2",
+      side: "left",
+      question: "Nested target",
+    });
+
+    expect(buildChatMessages(nested, "node-4")).toEqual([
+      { role: "user", content: "Main question" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "First child" },
+      { role: "assistant", content: "First child answer" },
+      { role: "user", content: "Nested origin" },
+      { role: "assistant", content: "Nested origin answer" },
+      { role: "user", content: "Nested target" },
     ]);
   });
 
