@@ -31,6 +31,7 @@ import {
 import {
   canBranchFromNode,
   isTipNode,
+  MAIN_BRANCH_ID,
   type BranchSide,
   type ChatNode,
   type ConversationState,
@@ -62,6 +63,7 @@ type ConversationFlowNode = Node<ConversationFlowNodeData, "conversation">;
 
 type ConversationFlowProps = {
   conversation: ConversationState;
+  originRequest: number;
   renderComposer: (node: ChatNode) => ReactNode;
   onRetry: (nodeId: string) => void;
   branchDraft: { nodeId: string; side: BranchSide } | null;
@@ -187,6 +189,7 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 export function ConversationFlow({
   conversation,
+  originRequest,
   renderComposer,
   onRetry,
   branchDraft,
@@ -198,6 +201,7 @@ export function ConversationFlow({
   const containerRef = useRef<HTMLDivElement>(null);
   const flowInstance = useRef<ReactFlowInstance<ConversationFlowNode, Edge> | null>(null);
   const viewport = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
+  const lastOriginRequest = useRef(originRequest);
   const lastAutoPannedNodeCount = useRef(0);
   const lastCompletedScroll = useRef<string | null>(null);
   const horizontalDrag = useRef<{
@@ -372,6 +376,17 @@ export function ConversationFlow({
     );
   }, [containerSize.width, nodePositions, nodeWidth]);
 
+  const originViewportX = useMemo(() => {
+    const mainNode = conversation.nodes.find(
+      (node) => node.branchId === MAIN_BRANCH_ID,
+    );
+    const mainPosition = mainNode ? nodePositions[mainNode.id] : undefined;
+
+    return mainPosition
+      ? containerSize.width / 2 - (mainPosition.x + nodeWidth / 2)
+      : 0;
+  }, [containerSize.width, conversation.nodes, nodePositions, nodeWidth]);
+
   const contentHeight = useMemo(() => {
     const contentBottom = nodes.reduce(
       (bottom, node) =>
@@ -409,6 +424,27 @@ export function ConversationFlow({
     viewport.current = nextViewport;
     void instance.setViewport(nextViewport);
   }, [constrainViewport]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const instance = flowInstance.current;
+
+    if (
+      !container ||
+      !instance ||
+      originRequest === lastOriginRequest.current
+    ) {
+      return;
+    }
+
+    lastOriginRequest.current = originRequest;
+    const nextViewport = constrainViewport({ x: originViewportX, y: 0, zoom: 1 });
+
+    horizontalDrag.current = null;
+    viewport.current = nextViewport;
+    void instance.setViewport(nextViewport);
+    container.scrollTo({ top: 0, behavior: "smooth" });
+  }, [constrainViewport, originRequest, originViewportX]);
 
   useEffect(() => {
     const container = containerRef.current;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Composer } from "@/components/composer";
 import { ConversationFlow } from "@/components/conversation-flow";
@@ -30,10 +30,20 @@ export function ChatExperience() {
   const [conversation, setConversation] = useState<ConversationState>(createConversation);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [branchDraft, setBranchDraft] = useState<BranchDraftState | null>(null);
+  const [sessionKey, setSessionKey] = useState(0);
+  const [originRequest, setOriginRequest] = useState(0);
   const nextNodeId = useRef(0);
   const nextBranchId = useRef(0);
+  const sessionVersion = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestController.current?.abort(), []);
 
   async function streamAnswer(targetConversation: ConversationState, nodeId: string) {
+    const version = sessionVersion.current;
+    const controller = new AbortController();
+
+    requestController.current = controller;
     setActiveNodeId(nodeId);
 
     try {
@@ -41,6 +51,7 @@ export function ChatExperience() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: buildChatMessages(targetConversation, nodeId) }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -67,9 +78,11 @@ export function ChatExperience() {
 
         if (delta) {
           receivedText = true;
-          setConversation((currentConversation) =>
-            appendAnswerDelta(currentConversation, nodeId, delta),
-          );
+          if (sessionVersion.current === version) {
+            setConversation((currentConversation) =>
+              appendAnswerDelta(currentConversation, nodeId, delta),
+            );
+          }
         }
       }
 
@@ -77,23 +90,54 @@ export function ChatExperience() {
 
       if (finalDelta) {
         receivedText = true;
-        setConversation((currentConversation) =>
-          appendAnswerDelta(currentConversation, nodeId, finalDelta),
-        );
+        if (sessionVersion.current === version) {
+          setConversation((currentConversation) =>
+            appendAnswerDelta(currentConversation, nodeId, finalDelta),
+          );
+        }
       }
 
       if (!receivedText) {
         throw new Error("The AI returned an empty response.");
       }
 
-      setConversation((currentConversation) => completeNode(currentConversation, nodeId));
+      if (sessionVersion.current === version) {
+        setConversation((currentConversation) => completeNode(currentConversation, nodeId));
+      }
     } catch {
-      setConversation((currentConversation) =>
-        failNode(currentConversation, nodeId, genericErrorCode),
-      );
+      if (!controller.signal.aborted && sessionVersion.current === version) {
+        setConversation((currentConversation) =>
+          failNode(currentConversation, nodeId, genericErrorCode),
+        );
+      }
     } finally {
-      setActiveNodeId(null);
+      if (requestController.current === controller) {
+        requestController.current = null;
+      }
+
+      if (sessionVersion.current === version) {
+        setActiveNodeId(null);
+      }
     }
+  }
+
+  function startNewChat() {
+    if (
+      conversation.nodes.length > 0 &&
+      !window.confirm("Start a new chat? The current conversation will be lost.")
+    ) {
+      return;
+    }
+
+    sessionVersion.current += 1;
+    requestController.current?.abort();
+    requestController.current = null;
+    nextNodeId.current = 0;
+    nextBranchId.current = 0;
+    setConversation(createConversation());
+    setActiveNodeId(null);
+    setBranchDraft(null);
+    setSessionKey((currentKey) => currentKey + 1);
   }
 
   function addNode(question: string, branchId = MAIN_BRANCH_ID) {
@@ -166,8 +210,24 @@ export function ChatExperience() {
 
   return (
     <section className="chat-experience" aria-labelledby="page-title">
+      <header className="app-toolbar">
+        <button type="button" className="app-toolbar__action" onClick={startNewChat}>
+          New chat
+        </button>
+        <h1 id="page-title">BranchChat</h1>
+        <button
+          type="button"
+          className="app-toolbar__action"
+          onClick={() => setOriginRequest((request) => request + 1)}
+        >
+          Back to Origin
+        </button>
+      </header>
+
       <ConversationFlow
+        key={sessionKey}
         conversation={conversation}
+        originRequest={originRequest}
         renderComposer={renderTipComposer}
         onRetry={retryNode}
         branchDraft={branchDraft}
@@ -179,8 +239,8 @@ export function ChatExperience() {
 
       {conversation.nodes.length === 0 ? (
         <div className="empty-chat">
-          <h1 id="page-title">BranchChat</h1>
           <Composer
+            key={sessionKey}
             id="initial-prompt"
             label="Ask BranchChat a question"
             placeholder="Ask anything..."
@@ -189,11 +249,7 @@ export function ChatExperience() {
             onSubmit={addNode}
           />
         </div>
-      ) : (
-        <h1 id="page-title" className="canvas-title">
-          BranchChat
-        </h1>
-      )}
+      ) : null}
     </section>
   );
 }
