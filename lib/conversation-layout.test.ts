@@ -290,5 +290,10 @@ describe("conversation layout", () => {
       minX: -580,
       maxX: 580,
     });
+
+    const zoomedBounds = getHorizontalViewportBounds(positions, 1440, 460, 0.7);
+
+    expect(zoomedBounds.minX).toBeCloseTo(-190);
+    expect(zoomedBounds.maxX).toBeCloseTo(622);
   });
 });

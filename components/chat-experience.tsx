@@ -26,12 +26,18 @@ type BranchDraftState = {
   side: BranchSide;
 };
 
+type ZoomRequest = {
+  id: number;
+  delta: number;
+};
+
 export function ChatExperience() {
   const [conversation, setConversation] = useState<ConversationState>(createConversation);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [branchDraft, setBranchDraft] = useState<BranchDraftState | null>(null);
   const [sessionKey, setSessionKey] = useState(0);
   const [originRequest, setOriginRequest] = useState(0);
+  const [zoomRequest, setZoomRequest] = useState<ZoomRequest>({ id: 0, delta: 0 });
   const nextNodeId = useRef(0);
   const nextBranchId = useRef(0);
   const sessionVersion = useRef(0);
@@ -140,6 +146,10 @@ export function ChatExperience() {
     setSessionKey((currentKey) => currentKey + 1);
   }
 
+  function changeZoom(delta: number) {
+    setZoomRequest((request) => ({ id: request.id + 1, delta }));
+  }
+
   function addNode(question: string, branchId = MAIN_BRANCH_ID) {
     if (activeNodeId) {
       return;
@@ -215,19 +225,31 @@ export function ChatExperience() {
           New chat
         </button>
         <h1 id="page-title">BranchChat</h1>
-        <button
-          type="button"
-          className="app-toolbar__action"
-          onClick={() => setOriginRequest((request) => request + 1)}
-        >
-          Back to Origin
-        </button>
+        <div className="app-toolbar__right">
+          <div className="zoom-control" aria-label="Canvas zoom">
+            <button type="button" aria-label="Zoom in" onClick={() => changeZoom(0.1)}>
+              +
+            </button>
+            <span aria-hidden="true" />
+            <button type="button" aria-label="Zoom out" onClick={() => changeZoom(-0.1)}>
+              −
+            </button>
+          </div>
+          <button
+            type="button"
+            className="app-toolbar__action"
+            onClick={() => setOriginRequest((request) => request + 1)}
+          >
+            Back to Origin
+          </button>
+        </div>
       </header>
 
       <ConversationFlow
         key={sessionKey}
         conversation={conversation}
         originRequest={originRequest}
+        zoomRequest={zoomRequest}
         renderComposer={renderTipComposer}
         onRetry={retryNode}
         branchDraft={branchDraft}

@@ -186,6 +186,7 @@ export function getHorizontalViewportBounds(
   positions: Readonly<Record<string, NodePosition>>,
   viewportWidth: number,
   nodeWidth: number,
+  zoom = 1,
 ): HorizontalViewportBounds {
   const nodeCenters = Object.values(positions).map(
     (position) => position.x + nodeWidth / 2,
@@ -198,7 +199,7 @@ export function getHorizontalViewportBounds(
   const viewportCenter = viewportWidth / 2;
 
   return {
-    minX: viewportCenter - Math.max(...nodeCenters),
-    maxX: viewportCenter - Math.min(...nodeCenters),
+    minX: viewportCenter - Math.max(...nodeCenters) * zoom,
+    maxX: viewportCenter - Math.min(...nodeCenters) * zoom,
   };
 }

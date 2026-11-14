@@ -44,6 +44,8 @@ const FALLBACK_NODE_HEIGHT = 240;
 const CANVAS_PADDING = 20;
 const CONTENT_BOTTOM_PADDING = 40;
 const CONTENT_SAFE_TOP = 92;
+const MIN_ZOOM = 0.7;
+const MAX_ZOOM = 1.3;
 
 type ConversationFlowNodeData = {
   chatNode: ChatNode;
@@ -64,6 +66,7 @@ type ConversationFlowNode = Node<ConversationFlowNodeData, "conversation">;
 type ConversationFlowProps = {
   conversation: ConversationState;
   originRequest: number;
+  zoomRequest: { id: number; delta: number };
   renderComposer: (node: ChatNode) => ReactNode;
   onRetry: (nodeId: string) => void;
   branchDraft: { nodeId: string; side: BranchSide } | null;
@@ -85,7 +88,7 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
       return;
     }
 
-    const reportHeight = () => data.onHeightChange(id, element.getBoundingClientRect().height);
+    const reportHeight = () => data.onHeightChange(id, element.offsetHeight);
     const observer = new ResizeObserver(reportHeight);
 
     reportHeight();
@@ -190,6 +193,7 @@ function clamp(value: number, minimum: number, maximum: number) {
 export function ConversationFlow({
   conversation,
   originRequest,
+  zoomRequest,
   renderComposer,
   onRetry,
   branchDraft,
@@ -202,6 +206,7 @@ export function ConversationFlow({
   const flowInstance = useRef<ReactFlowInstance<ConversationFlowNode, Edge> | null>(null);
   const viewport = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
   const lastOriginRequest = useRef(originRequest);
+  const lastZoomRequest = useRef(zoomRequest.id);
   const lastAutoPannedNodeCount = useRef(0);
   const lastCompletedScroll = useRef<string | null>(null);
   const horizontalDrag = useRef<{
@@ -211,6 +216,7 @@ export function ConversationFlow({
   } | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [nodeHeights, setNodeHeights] = useState<Record<string, number>>({});
+  const [canvasZoom, setCanvasZoom] = useState(1);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -368,23 +374,13 @@ export function ConversationFlow({
     [branchStrokes, conversation.branches, conversation.nodes],
   );
 
-  const viewportBounds = useMemo(() => {
-    return getHorizontalViewportBounds(
-      nodePositions,
-      containerSize.width,
-      nodeWidth,
-    );
-  }, [containerSize.width, nodePositions, nodeWidth]);
-
-  const originViewportX = useMemo(() => {
+  const originWorldX = useMemo(() => {
     const mainNode = conversation.nodes.find(
       (node) => node.branchId === MAIN_BRANCH_ID,
     );
     const mainPosition = mainNode ? nodePositions[mainNode.id] : undefined;
 
-    return mainPosition
-      ? containerSize.width / 2 - (mainPosition.x + nodeWidth / 2)
-      : 0;
+    return mainPosition ? mainPosition.x + nodeWidth / 2 : containerSize.width / 2;
   }, [containerSize.width, conversation.nodes, nodePositions, nodeWidth]);
 
   const contentHeight = useMemo(() => {
@@ -397,16 +393,30 @@ export function ConversationFlow({
       0,
     );
 
-    return Math.max(containerSize.height, contentBottom + CONTENT_BOTTOM_PADDING, 1);
-  }, [containerSize.height, nodeHeights, nodes]);
+    return Math.max(
+      containerSize.height,
+      (contentBottom + CONTENT_BOTTOM_PADDING) * canvasZoom,
+      1,
+    );
+  }, [canvasZoom, containerSize.height, nodeHeights, nodes]);
 
   const constrainViewport = useCallback(
-    (nextViewport: Viewport): Viewport => ({
-      x: clamp(nextViewport.x, viewportBounds.minX, viewportBounds.maxX),
-      y: 0,
-      zoom: 1,
-    }),
-    [viewportBounds],
+    (nextViewport: Viewport): Viewport => {
+      const zoom = clamp(nextViewport.zoom, MIN_ZOOM, MAX_ZOOM);
+      const bounds = getHorizontalViewportBounds(
+        nodePositions,
+        containerSize.width,
+        nodeWidth,
+        zoom,
+      );
+
+      return {
+        x: clamp(nextViewport.x, bounds.minX, bounds.maxX),
+        y: 0,
+        zoom,
+      };
+    },
+    [containerSize.width, nodePositions, nodeWidth],
   );
 
   useEffect(() => {
@@ -438,13 +448,44 @@ export function ConversationFlow({
     }
 
     lastOriginRequest.current = originRequest;
-    const nextViewport = constrainViewport({ x: originViewportX, y: 0, zoom: 1 });
+    const nextViewport = constrainViewport({
+      x: containerSize.width / 2 - originWorldX * canvasZoom,
+      y: 0,
+      zoom: canvasZoom,
+    });
 
     horizontalDrag.current = null;
     viewport.current = nextViewport;
     void instance.setViewport(nextViewport);
     container.scrollTo({ top: 0, behavior: "smooth" });
-  }, [constrainViewport, originRequest, originViewportX]);
+  }, [canvasZoom, constrainViewport, containerSize.width, originRequest, originWorldX]);
+
+  useEffect(() => {
+    const instance = flowInstance.current;
+
+    if (!instance || zoomRequest.id === lastZoomRequest.current) {
+      return;
+    }
+
+    lastZoomRequest.current = zoomRequest.id;
+    const currentViewport = viewport.current;
+    const nextZoom = clamp(
+      Math.round((currentViewport.zoom + zoomRequest.delta) * 10) / 10,
+      MIN_ZOOM,
+      MAX_ZOOM,
+    );
+    const worldCenter =
+      (containerSize.width / 2 - currentViewport.x) / currentViewport.zoom;
+    const nextViewport = constrainViewport({
+      x: containerSize.width / 2 - worldCenter * nextZoom,
+      y: 0,
+      zoom: nextZoom,
+    });
+
+    viewport.current = nextViewport;
+    setCanvasZoom(nextViewport.zoom);
+    void instance.setViewport(nextViewport);
+  }, [constrainViewport, containerSize.width, zoomRequest]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -460,8 +501,8 @@ export function ConversationFlow({
     }
 
     const frame = requestAnimationFrame(() => {
-      const tipHeight = nodeHeights[tipNode.id] ?? FALLBACK_NODE_HEIGHT;
-      const tipTop = tipNode.position.y;
+      const tipHeight = (nodeHeights[tipNode.id] ?? FALLBACK_NODE_HEIGHT) * canvasZoom;
+      const tipTop = tipNode.position.y * canvasZoom;
       const tipBottom = tipTop + tipHeight;
       const visibleTop = container.scrollTop + CONTENT_SAFE_TOP;
       const visibleBottom = container.scrollTop + container.clientHeight - 24;
@@ -478,8 +519,8 @@ export function ConversationFlow({
       }
 
       const currentViewport = viewport.current;
-      const visibleLeft = tipNode.position.x + currentViewport.x;
-      const visibleRight = visibleLeft + nodeWidth;
+      const visibleLeft = tipNode.position.x * canvasZoom + currentViewport.x;
+      const visibleRight = visibleLeft + nodeWidth * canvasZoom;
       let nextX = currentViewport.x;
 
       if (visibleLeft < CANVAS_PADDING) {
@@ -499,6 +540,7 @@ export function ConversationFlow({
 
     return () => cancelAnimationFrame(frame);
   }, [
+    canvasZoom,
     containerSize.height,
     constrainViewport,
     conversation.nodes.length,
@@ -572,7 +614,7 @@ export function ConversationFlow({
     }
 
     const nextX = drag.startViewportX + event.clientX - drag.startClientX;
-    const nextViewport = constrainViewport({ ...viewport.current, x: nextX, zoom: 1 });
+    const nextViewport = constrainViewport({ ...viewport.current, x: nextX });
 
     viewport.current = nextViewport;
     void flowInstance.current?.setViewport(nextViewport);
@@ -610,7 +652,6 @@ export function ConversationFlow({
     const nextViewport = constrainViewport({
       ...viewport.current,
       x: viewport.current.x - horizontalDelta,
-      zoom: 1,
     });
 
     viewport.current = nextViewport;
@@ -640,17 +681,18 @@ export function ConversationFlow({
           onMove={(_, nextViewport) => {
             const constrainedViewport = constrainViewport(nextViewport);
             viewport.current = constrainedViewport;
+            setCanvasZoom(constrainedViewport.zoom);
 
             if (
               constrainedViewport.x !== nextViewport.x ||
               constrainedViewport.y !== nextViewport.y ||
-              nextViewport.zoom !== 1
+              nextViewport.zoom !== constrainedViewport.zoom
             ) {
               void flowInstance.current?.setViewport(constrainedViewport);
             }
           }}
-          minZoom={1}
-          maxZoom={1}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
