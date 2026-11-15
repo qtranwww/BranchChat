@@ -78,6 +78,7 @@ export function ChatExperience() {
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const nextNodeId = useRef(0);
   const nextBranchId = useRef(0);
@@ -359,6 +360,53 @@ export function ChatExperience() {
     }
   }
 
+  async function removeConversation(item: ConversationSummary) {
+    if (
+      activeNodeId ||
+      deletingConversationId ||
+      !window.confirm(`Delete "${item.title}" from local history? This cannot be undone.`)
+    ) {
+      return;
+    }
+
+    setDeletingConversationId(item.id);
+
+    try {
+      await saveQueue.current;
+      const response = await fetch(`/api/conversations/${item.id}`, { method: "DELETE" });
+
+      if (!response.ok) {
+        throw new Error("Conversation could not be deleted.");
+      }
+
+      setHistory((currentHistory) => currentHistory.filter(({ id }) => id !== item.id));
+
+      if (item.id === conversationIdRef.current) {
+        sessionVersion.current += 1;
+        requestController.current?.abort();
+        requestController.current = null;
+        nextNodeId.current = 0;
+        nextBranchId.current = 0;
+        const nextConversation = createConversation();
+        const nextConversationId = createConversationId();
+
+        conversationRef.current = nextConversation;
+        conversationIdRef.current = nextConversationId;
+        setConversation(nextConversation);
+        setConversationId(nextConversationId);
+        setActiveNodeId(null);
+        setBranchDraft(null);
+        setSessionKey((currentKey) => currentKey + 1);
+      }
+
+      setStorageError(null);
+    } catch {
+      setStorageError("Local conversation could not be deleted.");
+    } finally {
+      setDeletingConversationId(null);
+    }
+  }
+
   function changeZoom(delta: number) {
     setZoomRequest((request) => ({ id: request.id + 1, delta }));
   }
@@ -456,16 +504,32 @@ export function ChatExperience() {
                   <p>No saved conversations yet.</p>
                 ) : (
                   history.map((item) => (
-                    <button
+                    <div
                       key={item.id}
-                      type="button"
-                      className={item.id === conversationId ? "is-current" : undefined}
-                      disabled={activeNodeId !== null}
-                      onClick={() => void loadConversation(item.id)}
+                      className={`history-item${item.id === conversationId ? " is-current" : ""}`}
                     >
-                      <span>{item.title}</span>
-                      <small>{item.nodeCount} {item.nodeCount === 1 ? "node" : "nodes"}</small>
-                    </button>
+                      <button
+                        type="button"
+                        className="history-item__open"
+                        disabled={activeNodeId !== null || deletingConversationId !== null}
+                        onClick={() => void loadConversation(item.id)}
+                      >
+                        <span>{item.title}</span>
+                        <small>{item.nodeCount} {item.nodeCount === 1 ? "node" : "nodes"}</small>
+                      </button>
+                      <button
+                        type="button"
+                        className="history-item__delete"
+                        aria-label={`Delete ${item.title}`}
+                        title="Delete conversation"
+                        disabled={activeNodeId !== null || deletingConversationId !== null}
+                        onClick={() => void removeConversation(item)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5" />
+                        </svg>
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

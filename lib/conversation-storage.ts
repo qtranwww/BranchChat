@@ -166,3 +166,10 @@ export function listConversationSummaries(
     updatedAt: new Date(row.updatedAt).toISOString(),
   }));
 }
+
+export function deleteConversation(
+  id: string,
+  database: LocalDatabase = getLocalDatabase(),
+): boolean {
+  return database.prepare("DELETE FROM conversations WHERE id = ?").run(id).changes === 1;
+}

@@ -170,12 +170,24 @@ textarea {
   font-size: 0.82rem;
 }
 
-.history-menu button {
-  width: 100%;
+.history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  border-radius: 7px;
+}
+
+.history-item:hover,
+.history-item:focus-within,
+.history-item.is-current {
+  background: #f2f2ef;
+}
+
+.history-item__open {
+  min-width: 0;
   display: grid;
   gap: 4px;
   border: 0;
-  border-radius: 7px;
   padding: 9px 10px;
   color: var(--ink);
   background: transparent;
@@ -183,29 +195,51 @@ textarea {
   text-align: left;
 }
 
-.history-menu button:hover,
-.history-menu button:focus-visible,
-.history-menu button.is-current {
-  background: #f2f2ef;
+.history-item__delete {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
 }
 
-.history-menu button:focus-visible {
+.history-item__delete svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.history-item__delete:hover {
+  color: #c43737;
+  background: #fff0f0;
+}
+
+.history-item button:focus-visible {
   outline: 2px solid rgb(53 106 230 / 35%);
   outline-offset: -2px;
 }
 
-.history-menu button:disabled {
+.history-item button:disabled {
   cursor: wait;
   opacity: 0.6;
 }
 
-.history-menu button span {
+.history-item__open span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.history-menu button small {
+.history-item__open small {
   color: var(--muted);
   font-size: 0.72rem;
 }

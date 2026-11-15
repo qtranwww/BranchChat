@@ -7,6 +7,7 @@ import {
   createConversation,
 } from "./conversation";
 import {
+  deleteConversation,
   listConversationSummaries,
   loadConversationSnapshot,
   saveConversationSnapshot,
@@ -107,6 +108,25 @@ describe("local conversation storage", () => {
     expect(loadConversationSnapshot("conversation-2", db)?.conversation.nodes[0].question).toBe(
       "Second",
     );
+  });
+
+  it("deletes a conversation and its tree", () => {
+    const db = getDatabase();
+    const conversation = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Delete me",
+      answer: "Gone",
+    });
+
+    saveConversationSnapshot(
+      { id: "conversation-1", title: "Delete me", conversation },
+      db,
+    );
+
+    expect(deleteConversation("conversation-1", db)).toBe(true);
+    expect(loadConversationSnapshot("conversation-1", db)).toBeNull();
+    expect(listConversationSummaries(db)).toEqual([]);
+    expect(deleteConversation("conversation-1", db)).toBe(false);
   });
 });
 

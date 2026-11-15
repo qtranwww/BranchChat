@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
+  deleteConversation,
   loadConversationSnapshot,
   saveConversationSnapshot,
 } from "@/lib/conversation-storage";
@@ -62,6 +63,21 @@ export async function PUT(request: Request, context: RouteContext) {
 
     return NextResponse.json(
       { error: "The local conversation could not be saved." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  const { id } = await context.params;
+
+  try {
+    return deleteConversation(id)
+      ? new Response(null, { status: 204 })
+      : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+  } catch {
+    return NextResponse.json(
+      { error: "The local conversation could not be deleted." },
       { status: 500 },
     );
   }
