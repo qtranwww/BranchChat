@@ -81,6 +81,14 @@ textarea {
   transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
 }
 
+.app-toolbar__left {
+  position: relative;
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .app-toolbar__right {
   justify-self: end;
   display: flex;
@@ -134,6 +142,92 @@ textarea {
 .app-toolbar__action:focus-visible {
   outline: 3px solid rgb(53 106 230 / 25%);
   outline-offset: 2px;
+}
+
+.history-control {
+  position: relative;
+}
+
+.history-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 10px);
+  left: 0;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 100px));
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgb(32 32 30 / 12%);
+}
+
+.history-menu p {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.history-menu button {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.history-menu button:hover,
+.history-menu button:focus-visible,
+.history-menu button.is-current {
+  background: #f2f2ef;
+}
+
+.history-menu button:focus-visible {
+  outline: 2px solid rgb(53 106 230 / 35%);
+  outline-offset: -2px;
+}
+
+.history-menu button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.history-menu button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-menu button small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.local-storage-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 260px;
+  color: #a63737;
+  font-size: 0.72rem;
+}
+
+.local-history-loading {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  color: var(--muted);
+  transform: translate(-50%, -50%);
 }
 
 .empty-chat {
@@ -615,6 +709,10 @@ h1 {
   .app-toolbar__action {
     padding: 7px 8px;
     font-size: 0.72rem;
+  }
+
+  .app-toolbar__left {
+    gap: 5px;
   }
 
   .app-toolbar__right {

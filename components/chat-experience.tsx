@@ -19,6 +19,19 @@ import {
   type ConversationState,
 } from "@/lib/conversation";
 
+type ConversationSummary = {
+  id: string;
+  title: string;
+  nodeCount: number;
+  updatedAt: string;
+};
+
+type ConversationSnapshot = {
+  id: string;
+  title: string;
+  conversation: ConversationState;
+};
+
 const genericErrorCode = "generation_failed";
 
 type BranchDraftState = {
@@ -31,19 +44,161 @@ type ZoomRequest = {
   delta: number;
 };
 
+function createConversationId() {
+  return crypto.randomUUID();
+}
+
+function getNextId(items: readonly { id: string }[], prefix: string): number {
+  return items.reduce((nextId, item) => {
+    const match = item.id.match(new RegExp(`^${prefix}(\\d+)$`));
+    return match ? Math.max(nextId, Number(match[1]) + 1) : nextId;
+  }, 0);
+}
+
+function getConversationTitle(conversation: ConversationState): string {
+  const firstQuestion = conversation.nodes.find(
+    (node) => node.branchId === MAIN_BRANCH_ID,
+  )?.question;
+
+  if (!firstQuestion) {
+    return "New conversation";
+  }
+
+  return firstQuestion.length > 64 ? `${firstQuestion.slice(0, 61)}...` : firstQuestion;
+}
+
 export function ChatExperience() {
   const [conversation, setConversation] = useState<ConversationState>(createConversation);
+  const [conversationId, setConversationId] = useState(createConversationId);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [branchDraft, setBranchDraft] = useState<BranchDraftState | null>(null);
   const [sessionKey, setSessionKey] = useState(0);
   const [originRequest, setOriginRequest] = useState(0);
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest>({ id: 0, delta: 0 });
+  const [history, setHistory] = useState<ConversationSummary[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const nextNodeId = useRef(0);
   const nextBranchId = useRef(0);
   const sessionVersion = useRef(0);
   const requestController = useRef<AbortController | null>(null);
+  const conversationRef = useRef(conversation);
+  const conversationIdRef = useRef(conversationId);
+  const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => () => requestController.current?.abort(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreLatestConversation() {
+      try {
+        const historyResponse = await fetch("/api/conversations", { cache: "no-store" });
+
+        if (!historyResponse.ok) {
+          throw new Error("History could not be read.");
+        }
+
+        const historyPayload = (await historyResponse.json()) as {
+          conversations: ConversationSummary[];
+        };
+
+        if (cancelled) {
+          return;
+        }
+
+        setHistory(historyPayload.conversations);
+        const latest = historyPayload.conversations[0];
+
+        if (!latest) {
+          return;
+        }
+
+        const conversationResponse = await fetch(`/api/conversations/${latest.id}`, {
+          cache: "no-store",
+        });
+
+        if (!conversationResponse.ok) {
+          throw new Error("Conversation could not be restored.");
+        }
+
+        const snapshot = (await conversationResponse.json()) as ConversationSnapshot;
+
+        if (!cancelled) {
+          conversationRef.current = snapshot.conversation;
+          conversationIdRef.current = snapshot.id;
+          setConversation(snapshot.conversation);
+          setConversationId(snapshot.id);
+          nextNodeId.current = getNextId(snapshot.conversation.nodes, "node-");
+          nextBranchId.current = getNextId(snapshot.conversation.branches, "branch-");
+          setSessionKey((currentKey) => currentKey + 1);
+        }
+      } catch {
+        if (!cancelled) {
+          setStorageError("Local history could not be restored.");
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    void restoreLatestConversation();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function replaceConversation(nextConversation: ConversationState) {
+    conversationRef.current = nextConversation;
+    setConversation(nextConversation);
+  }
+
+  function queueSave(
+    nextConversation: ConversationState,
+    targetId = conversationIdRef.current,
+  ) {
+    if (nextConversation.nodes.length === 0) {
+      return;
+    }
+
+    const title = getConversationTitle(nextConversation);
+    const snapshot: ConversationSnapshot = {
+      id: targetId,
+      title,
+      conversation: nextConversation,
+    };
+
+    saveQueue.current = saveQueue.current
+      .then(async () => {
+        const response = await fetch(`/api/conversations/${targetId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshot),
+        });
+
+        if (!response.ok) {
+          throw new Error("Conversation could not be saved.");
+        }
+
+        setStorageError(null);
+        setHistory((currentHistory) => {
+          const summary: ConversationSummary = {
+            id: targetId,
+            title,
+            nodeCount: nextConversation.nodes.length,
+            updatedAt: new Date().toISOString(),
+          };
+
+          return [summary, ...currentHistory.filter((item) => item.id !== targetId)];
+        });
+      })
+      .catch(() => {
+        setStorageError("Local save failed.");
+      });
+  }
 
   async function streamAnswer(targetConversation: ConversationState, nodeId: string) {
     const version = sessionVersion.current;
@@ -85,9 +240,7 @@ export function ChatExperience() {
         if (delta) {
           receivedText = true;
           if (sessionVersion.current === version) {
-            setConversation((currentConversation) =>
-              appendAnswerDelta(currentConversation, nodeId, delta),
-            );
+            replaceConversation(appendAnswerDelta(conversationRef.current, nodeId, delta));
           }
         }
       }
@@ -97,9 +250,7 @@ export function ChatExperience() {
       if (finalDelta) {
         receivedText = true;
         if (sessionVersion.current === version) {
-          setConversation((currentConversation) =>
-            appendAnswerDelta(currentConversation, nodeId, finalDelta),
-          );
+          replaceConversation(appendAnswerDelta(conversationRef.current, nodeId, finalDelta));
         }
       }
 
@@ -108,13 +259,19 @@ export function ChatExperience() {
       }
 
       if (sessionVersion.current === version) {
-        setConversation((currentConversation) => completeNode(currentConversation, nodeId));
+        const completedConversation = completeNode(conversationRef.current, nodeId);
+        replaceConversation(completedConversation);
+        queueSave(completedConversation);
       }
     } catch {
       if (!controller.signal.aborted && sessionVersion.current === version) {
-        setConversation((currentConversation) =>
-          failNode(currentConversation, nodeId, genericErrorCode),
+        const failedConversation = failNode(
+          conversationRef.current,
+          nodeId,
+          genericErrorCode,
         );
+        replaceConversation(failedConversation);
+        queueSave(failedConversation);
       }
     } finally {
       if (requestController.current === controller) {
@@ -128,10 +285,7 @@ export function ChatExperience() {
   }
 
   function startNewChat() {
-    if (
-      conversation.nodes.length > 0 &&
-      !window.confirm("Start a new chat? The current conversation will be lost.")
-    ) {
+    if (activeNodeId && !window.confirm("Start a new chat while an answer is generating?")) {
       return;
     }
 
@@ -140,10 +294,69 @@ export function ChatExperience() {
     requestController.current = null;
     nextNodeId.current = 0;
     nextBranchId.current = 0;
-    setConversation(createConversation());
+    const nextConversation = createConversation();
+    const nextConversationId = createConversationId();
+
+    conversationRef.current = nextConversation;
+    conversationIdRef.current = nextConversationId;
+    setConversation(nextConversation);
+    setConversationId(nextConversationId);
     setActiveNodeId(null);
     setBranchDraft(null);
+    setHistoryOpen(false);
     setSessionKey((currentKey) => currentKey + 1);
+  }
+
+  async function openHistory() {
+    setHistoryOpen((isOpen) => !isOpen);
+
+    try {
+      const response = await fetch("/api/conversations", { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error("History could not be read.");
+      }
+
+      const payload = (await response.json()) as { conversations: ConversationSummary[] };
+      setHistory(payload.conversations);
+      setStorageError(null);
+    } catch {
+      setStorageError("Local history could not be read.");
+    }
+  }
+
+  async function loadConversation(id: string) {
+    if (activeNodeId || id === conversationIdRef.current) {
+      setHistoryOpen(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error("Conversation could not be loaded.");
+      }
+
+      const snapshot = (await response.json()) as ConversationSnapshot;
+
+      sessionVersion.current += 1;
+      requestController.current?.abort();
+      requestController.current = null;
+      conversationRef.current = snapshot.conversation;
+      conversationIdRef.current = snapshot.id;
+      setConversation(snapshot.conversation);
+      setConversationId(snapshot.id);
+      nextNodeId.current = getNextId(snapshot.conversation.nodes, "node-");
+      nextBranchId.current = getNextId(snapshot.conversation.branches, "branch-");
+      setActiveNodeId(null);
+      setBranchDraft(null);
+      setHistoryOpen(false);
+      setStorageError(null);
+      setSessionKey((currentKey) => currentKey + 1);
+    } catch {
+      setStorageError("Local conversation could not be loaded.");
+    }
   }
 
   function changeZoom(delta: number) {
@@ -156,15 +369,16 @@ export function ChatExperience() {
     }
 
     const id = `node-${nextNodeId.current}`;
-    const nextConversation = appendNode(conversation, {
+    const nextConversation = appendNode(conversationRef.current, {
       id,
       branchId,
       question,
       status: "pending",
     });
 
-    setConversation(nextConversation);
+    replaceConversation(nextConversation);
     nextNodeId.current += 1;
+    queueSave(nextConversation);
     void streamAnswer(nextConversation, id);
   }
 
@@ -173,8 +387,9 @@ export function ChatExperience() {
       return;
     }
 
-    const retryConversation = prepareNodeRetry(conversation, nodeId);
-    setConversation(retryConversation);
+    const retryConversation = prepareNodeRetry(conversationRef.current, nodeId);
+    replaceConversation(retryConversation);
+    queueSave(retryConversation);
     void streamAnswer(retryConversation, nodeId);
   }
 
@@ -185,7 +400,7 @@ export function ChatExperience() {
 
     const nodeId = `node-${nextNodeId.current}`;
     const branchId = `branch-${nextBranchId.current}`;
-    const nextConversation = createChildBranch(conversation, {
+    const nextConversation = createChildBranch(conversationRef.current, {
       branchId,
       nodeId,
       originNodeId,
@@ -193,14 +408,15 @@ export function ChatExperience() {
       question,
     });
 
-    if (nextConversation === conversation) {
+    if (nextConversation === conversationRef.current) {
       return;
     }
 
-    setConversation(nextConversation);
+    replaceConversation(nextConversation);
     setBranchDraft(null);
     nextNodeId.current += 1;
     nextBranchId.current += 1;
+    queueSave(nextConversation);
     void streamAnswer(nextConversation, nodeId);
   }
 
@@ -221,9 +437,46 @@ export function ChatExperience() {
   return (
     <section className="chat-experience" aria-labelledby="page-title">
       <header className="app-toolbar">
-        <button type="button" className="app-toolbar__action" onClick={startNewChat}>
-          New chat
-        </button>
+        <div className="app-toolbar__left">
+          <button type="button" className="app-toolbar__action" onClick={startNewChat}>
+            New chat
+          </button>
+          <div className="history-control">
+            <button
+              type="button"
+              className="app-toolbar__action"
+              aria-expanded={historyOpen}
+              onClick={() => void openHistory()}
+            >
+              History
+            </button>
+            {historyOpen ? (
+              <div className="history-menu" aria-label="Local conversation history">
+                {history.length === 0 ? (
+                  <p>No saved conversations yet.</p>
+                ) : (
+                  history.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={item.id === conversationId ? "is-current" : undefined}
+                      disabled={activeNodeId !== null}
+                      onClick={() => void loadConversation(item.id)}
+                    >
+                      <span>{item.title}</span>
+                      <small>{item.nodeCount} {item.nodeCount === 1 ? "node" : "nodes"}</small>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
+          {storageError ? (
+            <span className="local-storage-error" role="alert">
+              {storageError}
+            </span>
+          ) : null}
+        </div>
         <h1 id="page-title">BranchChat</h1>
         <div className="app-toolbar__right">
           <div className="zoom-control" aria-label="Canvas zoom">
@@ -259,7 +512,7 @@ export function ChatExperience() {
         branchSubmissionDisabled={activeNodeId !== null}
       />
 
-      {conversation.nodes.length === 0 ? (
+      {!historyLoading && conversation.nodes.length === 0 ? (
         <div className="empty-chat">
           <Composer
             key={sessionKey}
@@ -272,6 +525,8 @@ export function ChatExperience() {
           />
         </div>
       ) : null}
+
+      {historyLoading ? <p className="local-history-loading">Loading local history...</p> : null}
     </section>
   );
 }
