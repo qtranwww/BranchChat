@@ -70,6 +70,27 @@ textarea {
   font-size: clamp(1.45rem, 3vw, 2rem);
 }
 
+.app-toolbar__identity {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+
+.ai-model-status {
+  max-width: min(32vw, 340px);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-model-status.is-unconfigured {
+  color: #a63737;
+}
+
 .app-toolbar__action {
   width: fit-content;
   border: 1px solid var(--border);
@@ -738,6 +759,11 @@ h1 {
 
   .app-toolbar h1 {
     font-size: 1.3rem;
+  }
+
+  .ai-model-status {
+    max-width: 24vw;
+    font-size: 0.58rem;
   }
 
   .app-toolbar__action {

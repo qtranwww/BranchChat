@@ -32,6 +32,13 @@ type ConversationSnapshot = {
   conversation: ConversationState;
 };
 
+type AIStatus = {
+  provider: string;
+  model: string | null;
+  configured: boolean;
+  issue?: string;
+};
+
 const genericErrorCode = "generation_failed";
 
 type BranchDraftState = {
@@ -80,6 +87,7 @@ export function ChatExperience() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
   const nextNodeId = useRef(0);
   const nextBranchId = useRef(0);
   const sessionVersion = useRef(0);
@@ -89,6 +97,38 @@ export function ChatExperience() {
   const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => () => requestController.current?.abort(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/settings/ai", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("AI status could not be read.");
+        }
+
+        return (await response.json()) as AIStatus;
+      })
+      .then((status) => {
+        if (!cancelled) {
+          setAIStatus(status);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAIStatus({
+            provider: "OpenRouter",
+            model: null,
+            configured: false,
+            issue: "The local AI configuration could not be read.",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +247,7 @@ export function ChatExperience() {
 
     requestController.current = controller;
     setActiveNodeId(nodeId);
+    let failureCode = genericErrorCode;
 
     try {
       const response = await fetch("/api/chat", {
@@ -217,7 +258,11 @@ export function ChatExperience() {
       });
 
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+          code?: string;
+        } | null;
+        failureCode = payload?.code || genericErrorCode;
         throw new Error(payload?.error || "The AI request failed.");
       }
 
@@ -269,7 +314,7 @@ export function ChatExperience() {
         const failedConversation = failNode(
           conversationRef.current,
           nodeId,
-          genericErrorCode,
+          failureCode,
         );
         replaceConversation(failedConversation);
         queueSave(failedConversation);
@@ -541,7 +586,19 @@ export function ChatExperience() {
             </span>
           ) : null}
         </div>
-        <h1 id="page-title">BranchChat</h1>
+        <div className="app-toolbar__identity">
+          <h1 id="page-title">BranchChat</h1>
+          <span
+            className={aiStatus?.configured ? "ai-model-status" : "ai-model-status is-unconfigured"}
+            title={aiStatus?.issue}
+          >
+            {aiStatus?.configured
+              ? `${aiStatus.provider} · ${aiStatus.model}`
+              : aiStatus
+                ? "AI not configured"
+                : "Checking AI..."}
+          </span>
+        </div>
         <div className="app-toolbar__right">
           <div className="zoom-control" aria-label="Canvas zoom">
             <button type="button" aria-label="Zoom in" onClick={() => changeZoom(0.1)}>

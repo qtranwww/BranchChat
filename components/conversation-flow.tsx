@@ -120,6 +120,7 @@ function FlowConversationNode({ id, data }: NodeProps<ConversationFlowNode>) {
         question={data.chatNode.question}
         answer={data.chatNode.answer}
         status={data.chatNode.status}
+        errorCode={data.chatNode.errorCode}
         isTip={data.isTip}
         onRetry={data.onRetry}
         composer={data.composer}

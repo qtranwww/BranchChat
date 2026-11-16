@@ -3,6 +3,8 @@ import { streamText } from "ai";
 import { NextResponse } from "next/server";
 
 import { InvalidChatRequestError, parseChatRequest } from "@/lib/chat-request";
+import { readOpenRouterConfiguration } from "@/lib/openrouter-config";
+import { describeProviderError } from "@/lib/openrouter-error";
 import { consumeChatRequest } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -10,8 +12,8 @@ export const maxDuration = 60;
 
 const MAX_BODY_BYTES = 64_000;
 
-function errorResponse(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
+function errorResponse(message: string, status: number, code?: string) {
+  return NextResponse.json({ error: message, ...(code ? { code } : {}) }, { status });
 }
 
 function getRequestIdentifier(request: Request): string {
@@ -67,12 +69,17 @@ async function createTextStreamResponse(
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  const modelId = process.env.OPENROUTER_MODEL;
+  const configurationResult = readOpenRouterConfiguration();
 
-  if (!apiKey || !modelId) {
-    return errorResponse("The hosted AI is not configured.", 503);
+  if (!configurationResult.ok) {
+    return errorResponse(
+      configurationResult.error.message,
+      503,
+      configurationResult.error.code,
+    );
   }
+
+  const { apiKey, modelId } = configurationResult.configuration;
 
   const contentLength = Number(request.headers.get("content-length") ?? 0);
 
@@ -110,9 +117,10 @@ export async function POST(request: Request) {
     return await createTextStreamResponse(result.textStream);
   } catch (error) {
     if (error instanceof InvalidChatRequestError || error instanceof SyntaxError) {
-      return errorResponse("The chat request is invalid.", 400);
+      return errorResponse("The chat request is invalid.", 400, "invalid_request");
     }
 
-    return errorResponse("The AI request could not be started.", 502);
+    const providerError = describeProviderError(error);
+    return errorResponse(providerError.message, providerError.status, providerError.code);
   }
 }
