@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   deleteConversation,
   loadConversationSnapshot,
+  renameConversation,
   saveConversationSnapshot,
 } from "@/lib/conversation-storage";
 import { parseConversationSnapshot } from "@/lib/conversation-snapshot";
@@ -78,6 +79,32 @@ export async function DELETE(_request: Request, context: RouteContext) {
   } catch {
     return NextResponse.json(
       { error: "The local conversation could not be deleted." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PATCH(request: Request, context: RouteContext) {
+  const { id } = await context.params;
+
+  try {
+    const body = (await request.json()) as { title?: unknown };
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+
+    if (!title || title.length > 120) {
+      return NextResponse.json({ error: "Conversation title is invalid." }, { status: 400 });
+    }
+
+    return renameConversation(id, title)
+      ? new Response(null, { status: 204 })
+      : NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Conversation title is invalid." }, { status: 400 });
+    }
+
+    return NextResponse.json(
+      { error: "The local conversation could not be renamed." },
       { status: 500 },
     );
   }

@@ -85,7 +85,7 @@ export function ChatExperience() {
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
+  const [historyMutationId, setHistoryMutationId] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
   const nextNodeId = useRef(0);
@@ -94,6 +94,7 @@ export function ChatExperience() {
   const requestController = useRef<AbortController | null>(null);
   const conversationRef = useRef(conversation);
   const conversationIdRef = useRef(conversationId);
+  const conversationTitleRef = useRef<string | null>(null);
   const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => () => requestController.current?.abort(), []);
@@ -169,6 +170,7 @@ export function ChatExperience() {
         if (!cancelled) {
           conversationRef.current = snapshot.conversation;
           conversationIdRef.current = snapshot.id;
+          conversationTitleRef.current = snapshot.title;
           setConversation(snapshot.conversation);
           setConversationId(snapshot.id);
           nextNodeId.current = getNextId(snapshot.conversation.nodes, "node-");
@@ -205,7 +207,7 @@ export function ChatExperience() {
       return;
     }
 
-    const title = getConversationTitle(nextConversation);
+    const title = conversationTitleRef.current ?? getConversationTitle(nextConversation);
     const snapshot: ConversationSnapshot = {
       id: targetId,
       title,
@@ -345,6 +347,7 @@ export function ChatExperience() {
 
     conversationRef.current = nextConversation;
     conversationIdRef.current = nextConversationId;
+    conversationTitleRef.current = null;
     setConversation(nextConversation);
     setConversationId(nextConversationId);
     setActiveNodeId(null);
@@ -391,6 +394,7 @@ export function ChatExperience() {
       requestController.current = null;
       conversationRef.current = snapshot.conversation;
       conversationIdRef.current = snapshot.id;
+      conversationTitleRef.current = snapshot.title;
       setConversation(snapshot.conversation);
       setConversationId(snapshot.id);
       nextNodeId.current = getNextId(snapshot.conversation.nodes, "node-");
@@ -408,13 +412,13 @@ export function ChatExperience() {
   async function removeConversation(item: ConversationSummary) {
     if (
       activeNodeId ||
-      deletingConversationId ||
+      historyMutationId ||
       !window.confirm(`Delete "${item.title}" from local history? This cannot be undone.`)
     ) {
       return;
     }
 
-    setDeletingConversationId(item.id);
+    setHistoryMutationId(item.id);
 
     try {
       await saveQueue.current;
@@ -437,6 +441,7 @@ export function ChatExperience() {
 
         conversationRef.current = nextConversation;
         conversationIdRef.current = nextConversationId;
+        conversationTitleRef.current = null;
         setConversation(nextConversation);
         setConversationId(nextConversationId);
         setActiveNodeId(null);
@@ -448,7 +453,60 @@ export function ChatExperience() {
     } catch {
       setStorageError("Local conversation could not be deleted.");
     } finally {
-      setDeletingConversationId(null);
+      setHistoryMutationId(null);
+    }
+  }
+
+  async function renameHistoryConversation(item: ConversationSummary) {
+    if (activeNodeId || historyMutationId) {
+      return;
+    }
+
+    const nextTitle = window.prompt("Rename conversation", item.title)?.trim();
+
+    if (!nextTitle || nextTitle === item.title) {
+      return;
+    }
+
+    if (nextTitle.length > 120) {
+      setStorageError("Conversation titles must be 120 characters or fewer.");
+      return;
+    }
+
+    const isCurrentConversation = item.id === conversationIdRef.current;
+    const previousTitle = conversationTitleRef.current;
+
+    if (isCurrentConversation) {
+      conversationTitleRef.current = nextTitle;
+    }
+
+    setHistoryMutationId(item.id);
+
+    try {
+      await saveQueue.current;
+      const response = await fetch(`/api/conversations/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Conversation could not be renamed.");
+      }
+
+      setHistory((currentHistory) =>
+        currentHistory.map((historyItem) =>
+          historyItem.id === item.id ? { ...historyItem, title: nextTitle } : historyItem,
+        ),
+      );
+      setStorageError(null);
+    } catch {
+      if (isCurrentConversation) {
+        conversationTitleRef.current = previousTitle;
+      }
+      setStorageError("Local conversation could not be renamed.");
+    } finally {
+      setHistoryMutationId(null);
     }
   }
 
@@ -556,24 +614,38 @@ export function ChatExperience() {
                       <button
                         type="button"
                         className="history-item__open"
-                        disabled={activeNodeId !== null || deletingConversationId !== null}
+                        disabled={activeNodeId !== null || historyMutationId !== null}
                         onClick={() => void loadConversation(item.id)}
                       >
                         <span>{item.title}</span>
                         <small>{item.nodeCount} {item.nodeCount === 1 ? "node" : "nodes"}</small>
                       </button>
-                      <button
-                        type="button"
-                        className="history-item__delete"
-                        aria-label={`Delete ${item.title}`}
-                        title="Delete conversation"
-                        disabled={activeNodeId !== null || deletingConversationId !== null}
-                        onClick={() => void removeConversation(item)}
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5" />
-                        </svg>
-                      </button>
+                      <div className="history-item__actions">
+                        <button
+                          type="button"
+                          className="history-item__rename"
+                          aria-label={`Rename ${item.title}`}
+                          title="Rename conversation"
+                          disabled={activeNodeId !== null || historyMutationId !== null}
+                          onClick={() => void renameHistoryConversation(item)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m4 16-.8 4.8L8 20l10.6-10.6-4-4L4 16Zm8.8-8.8 4 4M14.6 5.4l1.8-1.8a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-1.8 1.8" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="history-item__delete"
+                          aria-label={`Delete ${item.title}`}
+                          title="Delete conversation"
+                          disabled={activeNodeId !== null || historyMutationId !== null}
+                          onClick={() => void removeConversation(item)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}

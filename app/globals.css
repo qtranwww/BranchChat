@@ -193,7 +193,7 @@ textarea {
 
 .history-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   border-radius: 7px;
 }
@@ -216,6 +216,12 @@ textarea {
   text-align: left;
 }
 
+.history-item__actions {
+  display: flex;
+  align-items: center;
+}
+
+.history-item__rename,
 .history-item__delete {
   width: 32px;
   height: 32px;
@@ -229,6 +235,7 @@ textarea {
   cursor: pointer;
 }
 
+.history-item__rename svg,
 .history-item__delete svg {
   width: 17px;
   height: 17px;
@@ -237,6 +244,11 @@ textarea {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
+}
+
+.history-item__rename:hover {
+  color: var(--ink);
+  background: #e9e9e5;
 }
 
 .history-item__delete:hover {

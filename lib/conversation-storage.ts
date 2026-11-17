@@ -173,3 +173,13 @@ export function deleteConversation(
 ): boolean {
   return database.prepare("DELETE FROM conversations WHERE id = ?").run(id).changes === 1;
 }
+
+export function renameConversation(
+  id: string,
+  title: string,
+  database: LocalDatabase = getLocalDatabase(),
+): boolean {
+  return database
+    .prepare("UPDATE conversations SET title = ? WHERE id = ?")
+    .run(title, id).changes === 1;
+}

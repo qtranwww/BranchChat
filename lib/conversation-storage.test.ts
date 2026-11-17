@@ -10,6 +10,7 @@ import {
   deleteConversation,
   listConversationSummaries,
   loadConversationSnapshot,
+  renameConversation,
   saveConversationSnapshot,
 } from "./conversation-storage";
 import { parseConversationSnapshot } from "./conversation-snapshot";
@@ -127,6 +128,28 @@ describe("local conversation storage", () => {
     expect(loadConversationSnapshot("conversation-1", db)).toBeNull();
     expect(listConversationSummaries(db)).toEqual([]);
     expect(deleteConversation("conversation-1", db)).toBe(false);
+  });
+
+  it("renames a conversation without changing its tree", () => {
+    const db = getDatabase();
+    const conversation = appendNode(createConversation(), {
+      id: "node-0",
+      question: "Original question",
+      answer: "Answer",
+    });
+
+    saveConversationSnapshot(
+      { id: "conversation-1", title: "Original question", conversation },
+      db,
+    );
+
+    expect(renameConversation("conversation-1", "A clearer title", db)).toBe(true);
+    expect(loadConversationSnapshot("conversation-1", db)).toEqual({
+      id: "conversation-1",
+      title: "A clearer title",
+      conversation,
+    });
+    expect(renameConversation("missing", "Unused", db)).toBe(false);
   });
 });
 
