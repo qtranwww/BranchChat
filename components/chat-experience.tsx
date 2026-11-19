@@ -9,6 +9,7 @@ import {
   appendAnswerDelta,
   appendNode,
   buildChatMessages,
+  buildSummaryMessages,
   completeNode,
   createChildBranch,
   createConversation,
@@ -98,6 +99,7 @@ export function ChatExperience() {
   const conversationRef = useRef(conversation);
   const conversationIdRef = useRef(conversationId);
   const conversationTitleRef = useRef<string | null>(null);
+  const branchSummariesRef = useRef(new Map<string, string>());
   const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => () => requestController.current?.abort(), []);
@@ -255,10 +257,57 @@ export function ChatExperience() {
     let failureCode = genericErrorCode;
 
     try {
+      const targetNode = targetConversation.nodes.find((node) => node.id === nodeId);
+      const targetBranch = targetNode
+        ? targetConversation.branches.find((branch) => branch.id === targetNode.branchId)
+        : undefined;
+      let branchSummary: string | undefined;
+
+      if (
+        targetConversation.contextMode === "summary_beta" &&
+        targetBranch?.originNodeId
+      ) {
+        branchSummary = branchSummariesRef.current.get(targetBranch.id);
+
+        if (!branchSummary) {
+          const summaryResponse = await fetch("/api/branches/summary", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: buildSummaryMessages(targetConversation, targetBranch.originNodeId),
+            }),
+            signal: controller.signal,
+          });
+
+          if (!summaryResponse.ok) {
+            const payload = (await summaryResponse.json().catch(() => null)) as {
+              error?: string;
+              code?: string;
+            } | null;
+            failureCode = payload?.code || "summary_failed";
+            throw new Error(payload?.error || "The branch summary could not be generated.");
+          }
+
+          const payload = (await summaryResponse.json()) as { summary?: string };
+          branchSummary = payload.summary?.trim();
+
+          if (!branchSummary) {
+            failureCode = "summary_failed";
+            throw new Error("The branch summary was empty.");
+          }
+
+          if (sessionVersion.current === version) {
+            branchSummariesRef.current.set(targetBranch.id, branchSummary);
+          }
+        }
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: buildChatMessages(targetConversation, nodeId) }),
+        body: JSON.stringify({
+          messages: buildChatMessages(targetConversation, nodeId, branchSummary),
+        }),
         signal: controller.signal,
       });
 
@@ -351,6 +400,7 @@ export function ChatExperience() {
     conversationRef.current = nextConversation;
     conversationIdRef.current = nextConversationId;
     conversationTitleRef.current = null;
+    branchSummariesRef.current.clear();
     setConversation(nextConversation);
     setConversationId(nextConversationId);
     setActiveNodeId(null);
@@ -399,6 +449,7 @@ export function ChatExperience() {
       conversationRef.current = snapshot.conversation;
       conversationIdRef.current = snapshot.id;
       conversationTitleRef.current = snapshot.title;
+      branchSummariesRef.current.clear();
       setConversation(snapshot.conversation);
       setConversationId(snapshot.id);
       nextNodeId.current = getNextId(snapshot.conversation.nodes, "node-");
@@ -446,6 +497,7 @@ export function ChatExperience() {
         conversationRef.current = nextConversation;
         conversationIdRef.current = nextConversationId;
         conversationTitleRef.current = null;
+        branchSummariesRef.current.clear();
         setConversation(nextConversation);
         setConversationId(nextConversationId);
         setActiveNodeId(null);

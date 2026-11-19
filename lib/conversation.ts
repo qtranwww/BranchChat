@@ -4,6 +4,8 @@ export type ContextMode = "full" | "summary_beta";
 
 export const MAIN_BRANCH_ID = "branch-main";
 const MAX_CONTEXT_MESSAGES = 41;
+const MAX_SUMMARY_MESSAGES = 40;
+const MAX_MESSAGE_LENGTH = 4_000;
 
 export type Branch = {
   id: string;
@@ -255,9 +257,61 @@ function buildMessagesFromNodes(nodes: readonly ChatNode[], targetNodeId: string
 export function buildChatMessages(
   conversation: ConversationState,
   targetNodeId: string,
+  branchSummary?: string,
 ): ChatMessage[] {
+  const targetNode = conversation.nodes.find((node) => node.id === targetNodeId);
+  const branch = targetNode
+    ? conversation.branches.find((candidate) => candidate.id === targetNode.branchId)
+    : undefined;
+
+  if (branchSummary?.trim() && targetNode && branch?.originNodeId) {
+    const ownNodes = conversation.nodes
+      .filter((node) => node.branchId === branch.id && node.sequence <= targetNode.sequence)
+      .sort((first, second) => first.sequence - second.sequence)
+      .filter(
+        (node) =>
+          node.id === targetNode.id ||
+          (node.status === "completed" && Boolean(node.answer.trim())),
+      );
+    const messages = buildMessagesFromNodes(ownNodes, targetNode.id);
+
+    if (messages.length > 0) {
+      const prefix = "Background summary from before this branch:\n---\n";
+      const suffix = "\n---\nContinue from this background:\n";
+      const availableSummaryLength = Math.max(
+        0,
+        MAX_MESSAGE_LENGTH - prefix.length - suffix.length - messages[0].content.length,
+      );
+
+      messages[0] = {
+        role: "user",
+        content: `${prefix}${branchSummary.trim().slice(0, availableSummaryLength)}${suffix}${messages[0].content}`,
+      };
+    }
+
+    return messages.slice(-MAX_CONTEXT_MESSAGES);
+  }
+
   const contextNodes = getContextNodes(conversation, targetNodeId);
   return buildMessagesFromNodes(contextNodes, targetNodeId).slice(-MAX_CONTEXT_MESSAGES);
+}
+
+export function buildSummaryMessages(
+  conversation: ConversationState,
+  originNodeId: string,
+): ChatMessage[] {
+  const contextNodes = getContextNodes(conversation, originNodeId);
+
+  return contextNodes
+    .flatMap((node) =>
+      node.status === "completed" && node.answer.trim()
+        ? [
+            { role: "user", content: node.question } as const,
+            { role: "assistant", content: node.answer } as const,
+          ]
+        : [],
+    )
+    .slice(-MAX_SUMMARY_MESSAGES);
 }
 
 export function isTipNode(conversation: ConversationState, nodeId: string): boolean {

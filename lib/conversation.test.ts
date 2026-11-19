@@ -4,6 +4,7 @@ import {
   appendAnswerDelta,
   appendNode,
   buildChatMessages,
+  buildSummaryMessages,
   canBranchFromNode,
   completeNode,
   createChildBranch,
@@ -259,6 +260,38 @@ describe("linear conversation", () => {
     ]);
     expect(isTipNode(child, "node-1")).toBe(true);
     expect(isTipNode(child, "node-2")).toBe(true);
+  });
+
+  it("builds a parent summary request and replaces raw ancestry with its result", () => {
+    const first = appendQuestion(createConversation("summary_beta"), "node-0", "First parent");
+    const origin = appendQuestion(first, "node-1", "Fork origin");
+    const child = createChildBranch(origin, {
+      branchId: "branch-0",
+      nodeId: "node-2",
+      originNodeId: "node-1",
+      side: "left",
+      question: "Child question",
+    });
+
+    expect(buildSummaryMessages(child, "node-1")).toEqual([
+      { role: "user", content: "First parent" },
+      { role: "assistant", content: placeholderAnswer },
+      { role: "user", content: "Fork origin" },
+      { role: "assistant", content: placeholderAnswer },
+    ]);
+    expect(buildChatMessages(child, "node-2", "Compact parent background.")).toEqual([
+      {
+        role: "user",
+        content: [
+          "Background summary from before this branch:",
+          "---",
+          "Compact parent background.",
+          "---",
+          "Continue from this background:",
+          "Child question",
+        ].join("\n"),
+      },
+    ]);
   });
 
   it("stops parent context at the origin and excludes sibling branches", () => {

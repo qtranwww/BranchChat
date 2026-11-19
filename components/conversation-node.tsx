@@ -25,6 +25,9 @@ const errorMessages: Record<string, string> = {
   provider_unavailable: "OpenRouter or the selected model provider is temporarily unavailable.",
   provider_rejected: "OpenRouter rejected the request. Check the configured model and provider status.",
   invalid_request: "The conversation context is invalid or too large.",
+  summary_failed: "The parent context could not be summarized. Retry to try again.",
+  summary_context_invalid: "The parent context cannot be summarized in its current form.",
+  summary_context_too_large: "The parent context is too large to summarize safely.",
 };
 
 export function ConversationNode({
