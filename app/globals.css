@@ -78,7 +78,7 @@ textarea {
 }
 
 .ai-model-status {
-  max-width: min(32vw, 340px);
+  max-width: min(46vw, 600px);
   overflow: hidden;
   color: var(--muted);
   font-size: 0.68rem;
@@ -295,6 +295,125 @@ textarea {
   margin: 0;
   color: var(--muted);
   transform: translate(-50%, -50%);
+}
+
+.settings-dialog-backdrop {
+  position: absolute;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(32 32 30 / 28%);
+  backdrop-filter: blur(2px);
+}
+
+.settings-dialog {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 20px 60px rgb(32 32 30 / 20%);
+}
+
+.settings-dialog header {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-dialog h2,
+.settings-dialog p {
+  margin: 0;
+}
+
+.settings-dialog h2 {
+  font-size: 1.15rem;
+}
+
+.settings-dialog p,
+.context-mode-option small {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.settings-dialog fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.settings-dialog legend {
+  margin-bottom: 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.context-mode-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px;
+  cursor: pointer;
+}
+
+.context-mode-option:has(input:checked) {
+  border-color: #92928b;
+  background: #f7f7f4;
+}
+
+.context-mode-option input {
+  margin: 3px 0 0;
+  accent-color: var(--ink);
+}
+
+.context-mode-option span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.settings-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-dialog footer button {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.settings-dialog__cancel {
+  color: #555550;
+  background: #ffffff;
+}
+
+.settings-dialog__create {
+  border-color: var(--ink) !important;
+  color: #ffffff;
+  background: var(--ink);
+}
+
+.settings-dialog footer button:hover {
+  filter: brightness(0.96);
+}
+
+.settings-dialog footer button:focus-visible,
+.context-mode-option:has(input:focus-visible) {
+  outline: 3px solid rgb(53 106 230 / 25%);
+  outline-offset: 2px;
 }
 
 .empty-chat {
@@ -774,7 +893,7 @@ h1 {
   }
 
   .ai-model-status {
-    max-width: 24vw;
+    max-width: 30vw;
     font-size: 0.58rem;
   }
 

@@ -3,6 +3,7 @@ import {
   type Branch,
   type BranchSide,
   type ChatNode,
+  type ContextMode,
   type ConversationState,
   type NodeStatus,
 } from "./conversation";
@@ -11,6 +12,7 @@ import type { ConversationSnapshot } from "./conversation-storage";
 const idPattern = /^[a-zA-Z0-9_-]{1,100}$/;
 const statuses = new Set<NodeStatus>(["pending", "streaming", "completed", "failed"]);
 const sides = new Set<BranchSide>(["left", "right"]);
+const contextModes = new Set<ContextMode>(["full", "summary_beta"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -150,6 +152,7 @@ export function parseConversationSnapshot(
     !value.title.trim() ||
     value.title.length > 120 ||
     !isRecord(value.conversation) ||
+    !contextModes.has(value.conversation.contextMode as ContextMode) ||
     !Array.isArray(value.conversation.branches) ||
     !Array.isArray(value.conversation.nodes) ||
     value.conversation.branches.length === 0 ||
@@ -167,6 +170,7 @@ export function parseConversationSnapshot(
   }
 
   const conversation: ConversationState = {
+    contextMode: value.conversation.contextMode as ContextMode,
     branches: branches as Branch[],
     nodes: nodes as ChatNode[],
   };

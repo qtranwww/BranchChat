@@ -1,4 +1,10 @@
-import type { Branch, ChatNode, ConversationState, NodeStatus } from "./conversation";
+import type {
+  Branch,
+  ChatNode,
+  ContextMode,
+  ConversationState,
+  NodeStatus,
+} from "./conversation";
 import { getLocalDatabase, type LocalDatabase } from "./local-database";
 
 export type ConversationSnapshot = {
@@ -17,6 +23,7 @@ export type ConversationSummary = {
 type ConversationRow = {
   id: string;
   title: string;
+  contextMode: ContextMode;
 };
 
 type BranchRow = {
@@ -45,13 +52,21 @@ export function saveConversationSnapshot(
 
   database.transaction(() => {
     database.pragma("defer_foreign_keys = ON");
+    const existing = database
+      .prepare("SELECT context_mode AS contextMode FROM conversations WHERE id = ?")
+      .get(snapshot.id) as { contextMode: ContextMode } | undefined;
+
+    if (existing && existing.contextMode !== snapshot.conversation.contextMode) {
+      throw new Error("A conversation context mode cannot be changed after creation.");
+    }
+
     database
       .prepare(
-        `INSERT INTO conversations (id, title, created_at, updated_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO conversations (id, title, context_mode, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at`,
       )
-      .run(snapshot.id, snapshot.title, now, now);
+      .run(snapshot.id, snapshot.title, snapshot.conversation.contextMode, now, now);
 
     database.prepare("DELETE FROM nodes WHERE conversation_id = ?").run(snapshot.id);
     database.prepare("DELETE FROM branches WHERE conversation_id = ?").run(snapshot.id);
@@ -109,7 +124,9 @@ export function loadConversationSnapshot(
     .run(id);
 
   const conversation = database
-    .prepare("SELECT id, title FROM conversations WHERE id = ?")
+    .prepare(
+      "SELECT id, title, context_mode AS contextMode FROM conversations WHERE id = ?",
+    )
     .get(id) as ConversationRow | undefined;
 
   if (!conversation) {
@@ -134,6 +151,7 @@ export function loadConversationSnapshot(
     id: conversation.id,
     title: conversation.title,
     conversation: {
+      contextMode: conversation.contextMode,
       branches: branches satisfies Branch[],
       nodes: nodes satisfies ChatNode[],
     },

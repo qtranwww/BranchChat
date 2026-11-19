@@ -1,5 +1,6 @@
 export type NodeStatus = "pending" | "streaming" | "completed" | "failed";
 export type BranchSide = "left" | "right";
+export type ContextMode = "full" | "summary_beta";
 
 export const MAIN_BRANCH_ID = "branch-main";
 const MAX_CONTEXT_MESSAGES = 41;
@@ -23,6 +24,7 @@ export type ChatNode = {
 };
 
 export type ConversationState = {
+  contextMode: ContextMode;
   branches: readonly Branch[];
   nodes: readonly ChatNode[];
 };
@@ -50,8 +52,9 @@ export type ChatMessage = {
   content: string;
 };
 
-export function createConversation(): ConversationState {
+export function createConversation(contextMode: ContextMode = "full"): ConversationState {
   return {
+    contextMode,
     branches: [
       {
         id: MAIN_BRANCH_ID,
@@ -129,6 +132,7 @@ export function createChildBranch(
   };
 
   return {
+    ...conversation,
     branches: [...conversation.branches, branch],
     nodes: [...conversation.nodes, node],
   };
@@ -230,14 +234,10 @@ function getContextNodes(
   return [...inheritedNodes, ...ownNodes];
 }
 
-export function buildChatMessages(
-  conversation: ConversationState,
-  targetNodeId: string,
-): ChatMessage[] {
-  const contextNodes = getContextNodes(conversation, targetNodeId);
+function buildMessagesFromNodes(nodes: readonly ChatNode[], targetNodeId: string): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
-  for (const node of contextNodes) {
+  for (const node of nodes) {
     messages.push({ role: "user", content: node.question });
 
     if (node.id === targetNodeId) {
@@ -249,7 +249,15 @@ export function buildChatMessages(
     }
   }
 
-  return messages.slice(-MAX_CONTEXT_MESSAGES);
+  return messages;
+}
+
+export function buildChatMessages(
+  conversation: ConversationState,
+  targetNodeId: string,
+): ChatMessage[] {
+  const contextNodes = getContextNodes(conversation, targetNodeId);
+  return buildMessagesFromNodes(contextNodes, targetNodeId).slice(-MAX_CONTEXT_MESSAGES);
 }
 
 export function isTipNode(conversation: ConversationState, nodeId: string): boolean {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Composer } from "@/components/composer";
 import { ConversationFlow } from "@/components/conversation-flow";
+import { NewConversationDialog } from "@/components/new-conversation-dialog";
 import {
   appendAnswerDelta,
   appendNode,
@@ -16,6 +17,7 @@ import {
   prepareNodeRetry,
   type BranchSide,
   type ChatNode,
+  type ContextMode,
   type ConversationState,
 } from "@/lib/conversation";
 
@@ -84,6 +86,7 @@ export function ChatExperience() {
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest>({ id: 0, delta: 0 });
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [newConversationDialogOpen, setNewConversationDialogOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyMutationId, setHistoryMutationId] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -332,7 +335,7 @@ export function ChatExperience() {
     }
   }
 
-  function startNewChat() {
+  function startNewChat(contextMode: ContextMode) {
     if (activeNodeId && !window.confirm("Start a new chat while an answer is generating?")) {
       return;
     }
@@ -342,7 +345,7 @@ export function ChatExperience() {
     requestController.current = null;
     nextNodeId.current = 0;
     nextBranchId.current = 0;
-    const nextConversation = createConversation();
+    const nextConversation = createConversation(contextMode);
     const nextConversationId = createConversationId();
 
     conversationRef.current = nextConversation;
@@ -353,6 +356,7 @@ export function ChatExperience() {
     setActiveNodeId(null);
     setBranchDraft(null);
     setHistoryOpen(false);
+    setNewConversationDialogOpen(false);
     setSessionKey((currentKey) => currentKey + 1);
   }
 
@@ -585,11 +589,27 @@ export function ChatExperience() {
     );
   }
 
+  const contextModeLabel =
+    conversation.contextMode === "summary_beta" ? "Summary mode (Beta)" : "Full context";
+  const providerLabel = aiStatus?.configured
+    ? `${aiStatus.provider} · ${aiStatus.model}`
+    : aiStatus
+      ? "AI not configured"
+      : "Checking AI...";
+  const toolbarStatus = `${providerLabel} · ${contextModeLabel}`;
+
   return (
     <section className="chat-experience" aria-labelledby="page-title">
       <header className="app-toolbar">
         <div className="app-toolbar__left">
-          <button type="button" className="app-toolbar__action" onClick={startNewChat}>
+          <button
+            type="button"
+            className="app-toolbar__action"
+            onClick={() => {
+              setHistoryOpen(false);
+              setNewConversationDialogOpen(true);
+            }}
+          >
             New chat
           </button>
           <div className="history-control">
@@ -662,13 +682,9 @@ export function ChatExperience() {
           <h1 id="page-title">BranchChat</h1>
           <span
             className={aiStatus?.configured ? "ai-model-status" : "ai-model-status is-unconfigured"}
-            title={aiStatus?.issue}
+            title={aiStatus?.issue ?? toolbarStatus}
           >
-            {aiStatus?.configured
-              ? `${aiStatus.provider} · ${aiStatus.model}`
-              : aiStatus
-                ? "AI not configured"
-                : "Checking AI..."}
+            {toolbarStatus}
           </span>
         </div>
         <div className="app-toolbar__right">
@@ -690,6 +706,13 @@ export function ChatExperience() {
           </button>
         </div>
       </header>
+
+      {newConversationDialogOpen ? (
+        <NewConversationDialog
+          onCancel={() => setNewConversationDialogOpen(false)}
+          onCreate={startNewChat}
+        />
+      ) : null}
 
       <ConversationFlow
         key={sessionKey}

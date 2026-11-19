@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-const schemaVersion = 1;
+const schemaVersion = 2;
 
 const migrationV1 = `
   CREATE TABLE conversations (
@@ -61,6 +61,12 @@ const migrationV1 = `
   CREATE INDEX nodes_by_branch ON nodes(conversation_id, branch_id, sequence);
 `;
 
+const migrationV2 = `
+  ALTER TABLE conversations
+    ADD COLUMN context_mode TEXT NOT NULL DEFAULT 'full'
+    CHECK (context_mode IN ('full', 'summary_beta'));
+`;
+
 export type LocalDatabase = Database.Database;
 
 export function migrateLocalDatabase(database: LocalDatabase): void {
@@ -75,6 +81,13 @@ export function migrateLocalDatabase(database: LocalDatabase): void {
     database.transaction(() => {
       database.exec(migrationV1);
       database.pragma("user_version = 1");
+    })();
+  }
+
+  if (currentVersion < 2) {
+    database.transaction(() => {
+      database.exec(migrationV2);
+      database.pragma("user_version = 2");
     })();
   }
 }
@@ -103,6 +116,8 @@ const globalDatabase = globalThis as typeof globalThis & {
 export function getLocalDatabase(): LocalDatabase {
   if (!globalDatabase.branchChatDatabase) {
     globalDatabase.branchChatDatabase = openLocalDatabase(resolveDatabasePath());
+  } else {
+    migrateLocalDatabase(globalDatabase.branchChatDatabase);
   }
 
   return globalDatabase.branchChatDatabase;

@@ -151,6 +151,43 @@ describe("local conversation storage", () => {
     });
     expect(renameConversation("missing", "Unused", db)).toBe(false);
   });
+
+  it("persists the selected context mode and keeps it immutable", () => {
+    const db = getDatabase();
+    const parent = appendNode(createConversation("summary_beta"), {
+      id: "node-0",
+      question: "Parent",
+      answer: "Parent answer",
+      status: "completed",
+    });
+    const child = createChildBranch(parent, {
+      branchId: "branch-0",
+      nodeId: "node-1",
+      originNodeId: "node-0",
+      side: "left",
+      question: "Child",
+    });
+    saveConversationSnapshot(
+      { id: "conversation-1", title: "Beta", conversation: child },
+      db,
+    );
+
+    expect(loadConversationSnapshot("conversation-1", db)).toMatchObject({
+      conversation: {
+        contextMode: "summary_beta",
+      },
+    });
+    expect(() =>
+      saveConversationSnapshot(
+        {
+          id: "conversation-1",
+          title: "Changed",
+          conversation: { ...child, contextMode: "full" },
+        },
+        db,
+      ),
+    ).toThrow("context mode cannot be changed");
+  });
 });
 
 describe("conversation snapshot validation", () => {
