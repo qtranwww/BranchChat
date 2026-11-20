@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -5,6 +6,7 @@ import {
   completeNode,
   createChildBranch,
   createConversation,
+  setBranchSummary,
 } from "./conversation";
 import {
   deleteConversation,
@@ -14,7 +16,11 @@ import {
   saveConversationSnapshot,
 } from "./conversation-storage";
 import { parseConversationSnapshot } from "./conversation-snapshot";
-import { openLocalDatabase, type LocalDatabase } from "./local-database";
+import {
+  migrateLocalDatabase,
+  openLocalDatabase,
+  type LocalDatabase,
+} from "./local-database";
 
 let database: LocalDatabase | null = null;
 
@@ -152,7 +158,7 @@ describe("local conversation storage", () => {
     expect(renameConversation("missing", "Unused", db)).toBe(false);
   });
 
-  it("persists the selected context mode and keeps it immutable", () => {
+  it("persists beta mode and branch summaries while keeping the mode immutable", () => {
     const db = getDatabase();
     const parent = appendNode(createConversation("summary_beta"), {
       id: "node-0",
@@ -167,14 +173,17 @@ describe("local conversation storage", () => {
       side: "left",
       question: "Child",
     });
+    const summarized = setBranchSummary(child, "branch-0", "Stored parent summary");
+
     saveConversationSnapshot(
-      { id: "conversation-1", title: "Beta", conversation: child },
+      { id: "conversation-1", title: "Beta", conversation: summarized },
       db,
     );
 
     expect(loadConversationSnapshot("conversation-1", db)).toMatchObject({
       conversation: {
         contextMode: "summary_beta",
+        branches: [{ forkSummary: null }, { forkSummary: "Stored parent summary" }],
       },
     });
     expect(() =>
@@ -182,11 +191,22 @@ describe("local conversation storage", () => {
         {
           id: "conversation-1",
           title: "Changed",
-          conversation: { ...child, contextMode: "full" },
+          conversation: { ...summarized, contextMode: "full" },
         },
         db,
       ),
     ).toThrow("context mode cannot be changed");
+  });
+
+  it("accepts a pre-release database that already has the summary column", () => {
+    database = new Database(":memory:");
+    database.exec(`
+      CREATE TABLE branches (fork_summary TEXT);
+      PRAGMA user_version = 2;
+    `);
+
+    expect(() => migrateLocalDatabase(database as LocalDatabase)).not.toThrow();
+    expect(database.pragma("user_version", { simple: true })).toBe(3);
   });
 });
 

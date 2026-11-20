@@ -16,6 +16,7 @@ import {
   failNode,
   MAIN_BRANCH_ID,
   prepareNodeRetry,
+  setBranchSummary,
   type BranchSide,
   type ChatNode,
   type ContextMode,
@@ -99,7 +100,6 @@ export function ChatExperience() {
   const conversationRef = useRef(conversation);
   const conversationIdRef = useRef(conversationId);
   const conversationTitleRef = useRef<string | null>(null);
-  const branchSummariesRef = useRef(new Map<string, string>());
   const saveQueue = useRef(Promise.resolve());
 
   useEffect(() => () => requestController.current?.abort(), []);
@@ -255,58 +255,63 @@ export function ChatExperience() {
     requestController.current = controller;
     setActiveNodeId(nodeId);
     let failureCode = genericErrorCode;
+    let requestConversation = targetConversation;
 
     try {
-      const targetNode = targetConversation.nodes.find((node) => node.id === nodeId);
+      const targetNode = requestConversation.nodes.find((node) => node.id === nodeId);
       const targetBranch = targetNode
-        ? targetConversation.branches.find((branch) => branch.id === targetNode.branchId)
+        ? requestConversation.branches.find((branch) => branch.id === targetNode.branchId)
         : undefined;
-      let branchSummary: string | undefined;
 
       if (
-        targetConversation.contextMode === "summary_beta" &&
-        targetBranch?.originNodeId
+        requestConversation.contextMode === "summary_beta" &&
+        targetBranch?.originNodeId &&
+        !targetBranch.forkSummary
       ) {
-        branchSummary = branchSummariesRef.current.get(targetBranch.id);
+        const summaryResponse = await fetch("/api/branches/summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: buildSummaryMessages(requestConversation, targetBranch.originNodeId),
+          }),
+          signal: controller.signal,
+        });
 
-        if (!branchSummary) {
-          const summaryResponse = await fetch("/api/branches/summary", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: buildSummaryMessages(targetConversation, targetBranch.originNodeId),
-            }),
-            signal: controller.signal,
-          });
-
-          if (!summaryResponse.ok) {
-            const payload = (await summaryResponse.json().catch(() => null)) as {
-              error?: string;
-              code?: string;
-            } | null;
-            failureCode = payload?.code || "summary_failed";
-            throw new Error(payload?.error || "The branch summary could not be generated.");
-          }
-
-          const payload = (await summaryResponse.json()) as { summary?: string };
-          branchSummary = payload.summary?.trim();
-
-          if (!branchSummary) {
-            failureCode = "summary_failed";
-            throw new Error("The branch summary was empty.");
-          }
-
-          if (sessionVersion.current === version) {
-            branchSummariesRef.current.set(targetBranch.id, branchSummary);
-          }
+        if (!summaryResponse.ok) {
+          const payload = (await summaryResponse.json().catch(() => null)) as {
+            error?: string;
+            code?: string;
+          } | null;
+          failureCode = payload?.code || "summary_failed";
+          throw new Error(payload?.error || "The branch summary could not be generated.");
         }
+
+        const payload = (await summaryResponse.json()) as { summary?: string };
+
+        if (controller.signal.aborted || sessionVersion.current !== version) {
+          return;
+        }
+
+        requestConversation = setBranchSummary(
+          conversationRef.current,
+          targetBranch.id,
+          payload.summary ?? "",
+        );
+
+        if (requestConversation === conversationRef.current) {
+          failureCode = "summary_failed";
+          throw new Error("The branch summary was empty.");
+        }
+
+        replaceConversation(requestConversation);
+        queueSave(requestConversation);
       }
 
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: buildChatMessages(targetConversation, nodeId, branchSummary),
+          messages: buildChatMessages(requestConversation, nodeId),
         }),
         signal: controller.signal,
       });
@@ -400,7 +405,6 @@ export function ChatExperience() {
     conversationRef.current = nextConversation;
     conversationIdRef.current = nextConversationId;
     conversationTitleRef.current = null;
-    branchSummariesRef.current.clear();
     setConversation(nextConversation);
     setConversationId(nextConversationId);
     setActiveNodeId(null);
@@ -449,7 +453,6 @@ export function ChatExperience() {
       conversationRef.current = snapshot.conversation;
       conversationIdRef.current = snapshot.id;
       conversationTitleRef.current = snapshot.title;
-      branchSummariesRef.current.clear();
       setConversation(snapshot.conversation);
       setConversationId(snapshot.id);
       nextNodeId.current = getNextId(snapshot.conversation.nodes, "node-");
@@ -497,7 +500,6 @@ export function ChatExperience() {
         conversationRef.current = nextConversation;
         conversationIdRef.current = nextConversationId;
         conversationTitleRef.current = null;
-        branchSummariesRef.current.clear();
         setConversation(nextConversation);
         setConversationId(nextConversationId);
         setActiveNodeId(null);

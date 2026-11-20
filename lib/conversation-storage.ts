@@ -31,6 +31,7 @@ type BranchRow = {
   originNodeId: string | null;
   side: "left" | "right" | null;
   siblingOrder: number;
+  forkSummary: string | null;
 };
 
 type NodeRow = {
@@ -73,8 +74,8 @@ export function saveConversationSnapshot(
 
     const insertBranch = database.prepare(
       `INSERT INTO branches
-       (conversation_id, id, origin_node_id, side, sibling_order, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       (conversation_id, id, origin_node_id, side, sibling_order, fork_summary, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertNode = database.prepare(
       `INSERT INTO nodes
@@ -90,6 +91,7 @@ export function saveConversationSnapshot(
         branch.originNodeId,
         branch.side,
         branch.siblingOrder,
+        branch.forkSummary,
         index,
       );
     });
@@ -135,7 +137,8 @@ export function loadConversationSnapshot(
 
   const branches = database
     .prepare(
-      `SELECT id, origin_node_id AS originNodeId, side, sibling_order AS siblingOrder
+      `SELECT id, origin_node_id AS originNodeId, side, sibling_order AS siblingOrder,
+              fork_summary AS forkSummary
        FROM branches WHERE conversation_id = ? ORDER BY sort_order`,
     )
     .all(id) as BranchRow[];

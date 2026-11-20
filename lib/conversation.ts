@@ -12,6 +12,7 @@ export type Branch = {
   originNodeId: string | null;
   side: BranchSide | null;
   siblingOrder: number;
+  forkSummary: string | null;
 };
 
 export type ChatNode = {
@@ -63,6 +64,7 @@ export function createConversation(contextMode: ContextMode = "full"): Conversat
         originNodeId: null,
         side: null,
         siblingOrder: 0,
+        forkSummary: null,
       },
     ],
     nodes: [],
@@ -121,6 +123,7 @@ export function createChildBranch(
     originNodeId: input.originNodeId,
     side: input.side,
     siblingOrder,
+    forkSummary: null,
   };
   const node: ChatNode = {
     id: input.nodeId,
@@ -257,14 +260,13 @@ function buildMessagesFromNodes(nodes: readonly ChatNode[], targetNodeId: string
 export function buildChatMessages(
   conversation: ConversationState,
   targetNodeId: string,
-  branchSummary?: string,
 ): ChatMessage[] {
   const targetNode = conversation.nodes.find((node) => node.id === targetNodeId);
   const branch = targetNode
     ? conversation.branches.find((candidate) => candidate.id === targetNode.branchId)
     : undefined;
 
-  if (branchSummary?.trim() && targetNode && branch?.originNodeId) {
+  if (branch?.forkSummary && targetNode && branch.originNodeId) {
     const ownNodes = conversation.nodes
       .filter((node) => node.branchId === branch.id && node.sequence <= targetNode.sequence)
       .sort((first, second) => first.sequence - second.sequence)
@@ -285,7 +287,7 @@ export function buildChatMessages(
 
       messages[0] = {
         role: "user",
-        content: `${prefix}${branchSummary.trim().slice(0, availableSummaryLength)}${suffix}${messages[0].content}`,
+        content: `${prefix}${branch.forkSummary.slice(0, availableSummaryLength)}${suffix}${messages[0].content}`,
       };
     }
 
@@ -312,6 +314,30 @@ export function buildSummaryMessages(
         : [],
     )
     .slice(-MAX_SUMMARY_MESSAGES);
+}
+
+export function setBranchSummary(
+  conversation: ConversationState,
+  branchId: string,
+  forkSummary: string,
+): ConversationState {
+  const summary = forkSummary.trim();
+
+  if (!summary || summary.length > 12_000) {
+    return conversation;
+  }
+
+  let changed = false;
+  const branches = conversation.branches.map((branch) => {
+    if (branch.id !== branchId || branch.originNodeId === null || branch.forkSummary) {
+      return branch;
+    }
+
+    changed = true;
+    return { ...branch, forkSummary: summary };
+  });
+
+  return changed ? { ...conversation, branches } : conversation;
 }
 
 export function isTipNode(conversation: ConversationState, nodeId: string): boolean {

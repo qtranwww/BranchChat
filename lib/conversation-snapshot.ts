@@ -30,11 +30,14 @@ function parseBranch(value: unknown): Branch | null {
   const id = readId(value.id);
   const originNodeId = value.originNodeId === null ? null : readId(value.originNodeId);
   const side = value.side === null ? null : value.side;
+  const forkSummary = value.forkSummary == null ? null : value.forkSummary;
 
   if (
     !id ||
     (value.originNodeId !== null && !originNodeId) ||
     (side !== null && !sides.has(side as BranchSide)) ||
+    (forkSummary !== null &&
+      (typeof forkSummary !== "string" || !forkSummary.trim() || forkSummary.length > 12_000)) ||
     !Number.isInteger(value.siblingOrder) ||
     (value.siblingOrder as number) < 0
   ) {
@@ -46,6 +49,7 @@ function parseBranch(value: unknown): Branch | null {
     originNodeId,
     side: side as BranchSide | null,
     siblingOrder: value.siblingOrder as number,
+    forkSummary: forkSummary as string | null,
   };
 }
 
@@ -175,7 +179,13 @@ export function parseConversationSnapshot(
     nodes: nodes as ChatNode[],
   };
 
-  return isStructurallyValid(conversation)
+  const summariesAreValid = conversation.branches.every(
+    (branch) =>
+      branch.forkSummary === null ||
+      (conversation.contextMode === "summary_beta" && branch.originNodeId !== null),
+  );
+
+  return summariesAreValid && isStructurallyValid(conversation)
     ? { id: expectedId, title: value.title.trim(), conversation }
     : null;
 }

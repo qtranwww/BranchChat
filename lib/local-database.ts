@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-const schemaVersion = 2;
+const schemaVersion = 3;
 
 const migrationV1 = `
   CREATE TABLE conversations (
@@ -67,7 +67,18 @@ const migrationV2 = `
     CHECK (context_mode IN ('full', 'summary_beta'));
 `;
 
+const migrationV3 = `
+  ALTER TABLE branches
+    ADD COLUMN fork_summary TEXT
+    CHECK (fork_summary IS NULL OR length(fork_summary) <= 12000);
+`;
+
 export type LocalDatabase = Database.Database;
+
+function hasColumn(database: LocalDatabase, table: string, column: string): boolean {
+  const columns = database.pragma(`table_info(${table})`) as Array<{ name: string }>;
+  return columns.some((candidate) => candidate.name === column);
+}
 
 export function migrateLocalDatabase(database: LocalDatabase): void {
   database.pragma("foreign_keys = ON");
@@ -88,6 +99,16 @@ export function migrateLocalDatabase(database: LocalDatabase): void {
     database.transaction(() => {
       database.exec(migrationV2);
       database.pragma("user_version = 2");
+    })();
+  }
+
+  if (currentVersion < 3) {
+    database.transaction(() => {
+      if (!hasColumn(database, "branches", "fork_summary")) {
+        database.exec(migrationV3);
+      }
+
+      database.pragma("user_version = 3");
     })();
   }
 }

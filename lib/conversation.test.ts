@@ -13,6 +13,7 @@ import {
   isTipNode,
   MAIN_BRANCH_ID,
   prepareNodeRetry,
+  setBranchSummary,
 } from "./conversation";
 
 const placeholderAnswer = "\\<answer zone\\>";
@@ -181,6 +182,7 @@ describe("linear conversation", () => {
       originNodeId: "node-0",
       side: "left",
       siblingOrder: 0,
+      forkSummary: null,
     });
     expect(branchedConversation.nodes.at(-1)).toMatchObject({
       id: "node-1",
@@ -279,7 +281,9 @@ describe("linear conversation", () => {
       { role: "user", content: "Fork origin" },
       { role: "assistant", content: placeholderAnswer },
     ]);
-    expect(buildChatMessages(child, "node-2", "Compact parent background.")).toEqual([
+    const summarized = setBranchSummary(child, "branch-0", "Compact parent background.");
+
+    expect(buildChatMessages(summarized, "node-2")).toEqual([
       {
         role: "user",
         content: [
@@ -292,6 +296,7 @@ describe("linear conversation", () => {
         ].join("\n"),
       },
     ]);
+    expect(setBranchSummary(summarized, "branch-0", "Replacement")).toBe(summarized);
   });
 
   it("stops parent context at the origin and excludes sibling branches", () => {
