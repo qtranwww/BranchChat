@@ -299,6 +299,123 @@ describe("linear conversation", () => {
     expect(setBranchSummary(summarized, "branch-0", "Replacement")).toBe(summarized);
   });
 
+  it("inherits ancestor summaries while summarizing only the immediate parent branch", () => {
+    const main = appendQuestion(
+      createConversation("summary_beta"),
+      "node-a0",
+      "Raw A question",
+    );
+    const child = createChildBranch(main, {
+      branchId: "branch-b",
+      nodeId: "node-b0",
+      originNodeId: "node-a0",
+      side: "left",
+      question: "B first question",
+      answer: "B first answer",
+      status: "completed",
+    });
+    const summarizedChild = setBranchSummary(child, "branch-b", "Stored A summary");
+    const childOrigin = appendNode(summarizedChild, {
+      id: "node-b1",
+      branchId: "branch-b",
+      question: "B origin question",
+      answer: "B origin answer",
+      status: "completed",
+    });
+    const unrelated = createChildBranch(childOrigin, {
+      branchId: "branch-sibling",
+      nodeId: "node-sibling",
+      originNodeId: "node-b0",
+      side: "right",
+      question: "Sibling secret",
+      answer: "Sibling secret answer",
+      status: "completed",
+    });
+    const nested = createChildBranch(unrelated, {
+      branchId: "branch-c",
+      nodeId: "node-c0",
+      originNodeId: "node-b1",
+      side: "left",
+      question: "C first question",
+    });
+
+    expect(buildSummaryMessages(nested, "node-b1")).toEqual([
+      { role: "user", content: "B first question" },
+      { role: "assistant", content: "B first answer" },
+      { role: "user", content: "B origin question" },
+      { role: "assistant", content: "B origin answer" },
+    ]);
+
+    const summarizedNested = setBranchSummary(nested, "branch-c", "New B summary");
+    const nestedSummary = summarizedNested.branches.find(
+      (branch) => branch.id === "branch-c",
+    )?.forkSummary;
+    const nestedMessages = buildChatMessages(summarizedNested, "node-c0");
+
+    expect(nestedSummary).toContain("Stored A summary");
+    expect(nestedSummary).toContain("New B summary");
+    expect(nestedMessages).toHaveLength(1);
+    expect(nestedMessages[0].content).toContain("Stored A summary");
+    expect(nestedMessages[0].content).toContain("New B summary");
+    expect(nestedMessages[0].content).toContain("C first question");
+    expect(nestedMessages[0].content).not.toContain("Raw A question");
+    expect(nestedMessages[0].content).not.toContain("B origin question");
+    expect(nestedMessages[0].content).not.toContain("Sibling secret");
+  });
+
+  it("enforces inherited-summary and beta payload budgets", () => {
+    const main = appendQuestion(
+      createConversation("summary_beta"),
+      "node-a0",
+      "Main",
+    );
+    const child = createChildBranch(main, {
+      branchId: "branch-b",
+      nodeId: "node-b0",
+      originNodeId: "node-a0",
+      side: "left",
+      question: "B0",
+      answer: "Answer 0",
+      status: "completed",
+    });
+    let conversation = setBranchSummary(child, "branch-b", "A".repeat(12_000));
+
+    for (let index = 1; index <= 24; index += 1) {
+      conversation = appendNode(conversation, {
+        id: `node-b${index}`,
+        branchId: "branch-b",
+        question: `Question ${index}`,
+        answer: "x".repeat(2_000),
+        status: "completed",
+      });
+    }
+
+    conversation = appendNode(conversation, {
+      id: "node-target",
+      branchId: "branch-b",
+      question: "Current question",
+      status: "pending",
+    });
+
+    const messages = buildChatMessages(conversation, "node-target");
+    const totalLength = messages.reduce((total, message) => total + message.content.length, 0);
+
+    expect(messages.length).toBeLessThanOrEqual(41);
+    expect(messages.at(-1)).toEqual({ role: "user", content: "Current question" });
+    expect(messages.every((message) => message.content.length <= 16_500)).toBe(true);
+    expect(totalLength).toBeLessThanOrEqual(40_000);
+
+    const nested = createChildBranch(conversation, {
+      branchId: "branch-c",
+      nodeId: "node-c0",
+      originNodeId: "node-b24",
+      side: "left",
+      question: "Nested",
+    });
+
+    expect(setBranchSummary(nested, "branch-c", "B summary")).toBe(nested);
+  });
+
   it("stops parent context at the origin and excludes sibling branches", () => {
     const first = appendQuestion(createConversation(), "node-0", "First parent");
     const origin = appendQuestion(first, "node-1", "Fork origin");

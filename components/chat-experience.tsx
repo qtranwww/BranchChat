@@ -299,8 +299,10 @@ export function ChatExperience() {
         );
 
         if (requestConversation === conversationRef.current) {
-          failureCode = "summary_failed";
-          throw new Error("The branch summary was empty.");
+          failureCode = payload.summary?.trim()
+            ? "summary_context_too_large"
+            : "summary_failed";
+          throw new Error("The branch summary could not be stored within its context budget.");
         }
 
         replaceConversation(requestConversation);

@@ -15,6 +15,22 @@ describe("chat request validation", () => {
     ).toHaveLength(3);
   });
 
+  it("accepts a bounded combined summary prompt", () => {
+    expect(
+      parseChatRequest({
+        messages: [{ role: "user", content: "x".repeat(16_000) }],
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("rejects a message beyond the combined summary budget", () => {
+    expect(() =>
+      parseChatRequest({
+        messages: [{ role: "user", content: "x".repeat(16_501) }],
+      }),
+    ).toThrow(InvalidChatRequestError);
+  });
+
   it.each([
     null,
     {},

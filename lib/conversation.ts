@@ -4,8 +4,12 @@ export type ContextMode = "full" | "summary_beta";
 
 export const MAIN_BRANCH_ID = "branch-main";
 const MAX_CONTEXT_MESSAGES = 41;
-const MAX_SUMMARY_MESSAGES = 40;
-const MAX_MESSAGE_LENGTH = 4_000;
+const MAX_CONTEXT_TOTAL_LENGTH = 40_000;
+const MAX_COMBINED_MESSAGE_LENGTH = 16_500;
+const MAX_FORK_SUMMARY_LENGTH = 12_000;
+const SUMMARY_PREFIX = "Background summary from before this branch:\n---\n";
+const SUMMARY_SUFFIX = "\n---\nContinue from this background:\n";
+const SUMMARY_SEPARATOR = "\n\n--- Next branch background ---\n\n";
 
 export type Branch = {
   id: string;
@@ -257,6 +261,59 @@ function buildMessagesFromNodes(nodes: readonly ChatNode[], targetNodeId: string
   return messages;
 }
 
+function buildSummaryBranchMessages(
+  conversation: ConversationState,
+  targetNode: ChatNode,
+  branch: Branch,
+): ChatMessage[] {
+  const ownNodes = conversation.nodes
+    .filter((node) => node.branchId === branch.id && node.sequence <= targetNode.sequence)
+    .sort((first, second) => first.sequence - second.sequence)
+    .filter(
+      (node) =>
+        node.id === targetNode.id ||
+        (node.status === "completed" && Boolean(node.answer.trim())),
+    );
+  const selectedNodes = [targetNode];
+  let totalLength =
+    SUMMARY_PREFIX.length +
+    branch.forkSummary!.length +
+    SUMMARY_SUFFIX.length +
+    targetNode.question.length;
+
+  for (let index = ownNodes.length - 2; index >= 0; index -= 1) {
+    const node = ownNodes[index];
+    const turnLength = node.question.length + node.answer.length;
+
+    if (
+      selectedNodes.length >= (MAX_CONTEXT_MESSAGES + 1) / 2 ||
+      node.answer.length > MAX_COMBINED_MESSAGE_LENGTH ||
+      totalLength + turnLength > MAX_CONTEXT_TOTAL_LENGTH
+    ) {
+      break;
+    }
+
+    selectedNodes.unshift(node);
+    totalLength += turnLength;
+  }
+
+  const messages = buildMessagesFromNodes(selectedNodes, targetNode.id);
+  const firstMessage = messages[0];
+
+  if (!firstMessage) {
+    return [];
+  }
+
+  const content = `${SUMMARY_PREFIX}${branch.forkSummary}${SUMMARY_SUFFIX}${firstMessage.content}`;
+
+  if (content.length > MAX_COMBINED_MESSAGE_LENGTH) {
+    return [];
+  }
+
+  messages[0] = { role: "user", content };
+  return messages;
+}
+
 export function buildChatMessages(
   conversation: ConversationState,
   targetNodeId: string,
@@ -267,31 +324,7 @@ export function buildChatMessages(
     : undefined;
 
   if (branch?.forkSummary && targetNode && branch.originNodeId) {
-    const ownNodes = conversation.nodes
-      .filter((node) => node.branchId === branch.id && node.sequence <= targetNode.sequence)
-      .sort((first, second) => first.sequence - second.sequence)
-      .filter(
-        (node) =>
-          node.id === targetNode.id ||
-          (node.status === "completed" && Boolean(node.answer.trim())),
-      );
-    const messages = buildMessagesFromNodes(ownNodes, targetNode.id);
-
-    if (messages.length > 0) {
-      const prefix = "Background summary from before this branch:\n---\n";
-      const suffix = "\n---\nContinue from this background:\n";
-      const availableSummaryLength = Math.max(
-        0,
-        MAX_MESSAGE_LENGTH - prefix.length - suffix.length - messages[0].content.length,
-      );
-
-      messages[0] = {
-        role: "user",
-        content: `${prefix}${branch.forkSummary.slice(0, availableSummaryLength)}${suffix}${messages[0].content}`,
-      };
-    }
-
-    return messages.slice(-MAX_CONTEXT_MESSAGES);
+    return buildSummaryBranchMessages(conversation, targetNode, branch);
   }
 
   const contextNodes = getContextNodes(conversation, targetNodeId);
@@ -302,18 +335,27 @@ export function buildSummaryMessages(
   conversation: ConversationState,
   originNodeId: string,
 ): ChatMessage[] {
-  const contextNodes = getContextNodes(conversation, originNodeId);
+  const originNode = conversation.nodes.find((node) => node.id === originNodeId);
+
+  if (!originNode) {
+    return [];
+  }
+
+  const contextNodes = conversation.nodes
+    .filter(
+      (node) =>
+        node.branchId === originNode.branchId &&
+        node.sequence <= originNode.sequence &&
+        node.status === "completed" &&
+        Boolean(node.answer.trim()),
+    )
+    .sort((first, second) => first.sequence - second.sequence);
 
   return contextNodes
-    .flatMap((node) =>
-      node.status === "completed" && node.answer.trim()
-        ? [
-            { role: "user", content: node.question } as const,
-            { role: "assistant", content: node.answer } as const,
-          ]
-        : [],
-    )
-    .slice(-MAX_SUMMARY_MESSAGES);
+    .flatMap((node) => [
+      { role: "user", content: node.question } as const,
+      { role: "assistant", content: node.answer } as const,
+    ]);
 }
 
 export function setBranchSummary(
@@ -323,7 +365,28 @@ export function setBranchSummary(
 ): ConversationState {
   const summary = forkSummary.trim();
 
-  if (!summary || summary.length > 12_000) {
+  if (!summary || conversation.contextMode !== "summary_beta") {
+    return conversation;
+  }
+
+  const targetBranch = conversation.branches.find((branch) => branch.id === branchId);
+  const originNode = targetBranch?.originNodeId
+    ? conversation.nodes.find((node) => node.id === targetBranch.originNodeId)
+    : undefined;
+  const parentBranch = originNode
+    ? conversation.branches.find((branch) => branch.id === originNode.branchId)
+    : undefined;
+  const inheritedSummary = parentBranch?.forkSummary?.trim();
+  const combinedSummary = inheritedSummary
+    ? `${inheritedSummary}${SUMMARY_SEPARATOR}${summary}`
+    : summary;
+
+  if (
+    !targetBranch ||
+    !originNode ||
+    !parentBranch ||
+    combinedSummary.length > MAX_FORK_SUMMARY_LENGTH
+  ) {
     return conversation;
   }
 
@@ -334,7 +397,7 @@ export function setBranchSummary(
     }
 
     changed = true;
-    return { ...branch, forkSummary: summary };
+    return { ...branch, forkSummary: combinedSummary };
   });
 
   return changed ? { ...conversation, branches } : conversation;

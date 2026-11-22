@@ -1,7 +1,7 @@
 import type { ChatMessage } from "./conversation";
 
 const MAX_MESSAGES = 41;
-const MAX_MESSAGE_LENGTH = 4_000;
+const MAX_MESSAGE_LENGTH = 16_500;
 const MAX_TOTAL_LENGTH = 40_000;
 
 export class InvalidChatRequestError extends Error {}
